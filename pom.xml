@@ -6,7 +6,7 @@
 
 	<groupId>dev.nuclr.plugin.core</groupId>
 	<artifactId>filepanel-s3</artifactId>
-	<version>1.0.1</version>
+	<version>1.0.2</version>
 	<name>Nuclr File Panel - S3</name>
 
 	<properties>

@@ -26,6 +26,7 @@ import dev.nuclr.plugin.core.panel.s3.auth.CredentialsResolver;
 import dev.nuclr.plugin.core.panel.s3.auth.S3Profile;
 import dev.nuclr.plugin.core.panel.s3.auth.S3ProfileStore;
 import dev.nuclr.plugin.core.panel.s3.auth.SecretCache;
+import dev.nuclr.plugin.core.panel.s3.auth.SecretStore;
 
 /**
  * The process-wide registry of live {@link S3Client}s, one per connection profile.
@@ -47,6 +48,8 @@ public final class S3Clients {
 
 	private static volatile S3ProfileStore store = S3ProfileStore.defaultStore();
 
+	private static volatile SecretStore secrets = SecretStore.defaultStore();
+
 	private S3Clients() {}
 
 	/**
@@ -66,6 +69,24 @@ public final class S3Clients {
 	public static void useStore(S3ProfileStore replacement) {
 		store = replacement;
 		CLIENTS.clear();
+	}
+
+	/**
+	 * The store holding secrets the user asked this machine to remember.
+	 *
+	 * @return the shared secret store
+	 */
+	public static SecretStore secrets() {
+		return secrets;
+	}
+
+	/**
+	 * Point the registry at a different secret store, as tests do.
+	 *
+	 * @param replacement the store to use
+	 */
+	public static void useSecretStore(SecretStore replacement) {
+		secrets = replacement;
 	}
 
 	/**

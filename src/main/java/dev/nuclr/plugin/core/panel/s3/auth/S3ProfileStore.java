@@ -38,7 +38,9 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>The production store lives at {@code ~/.nuclr/s3/profiles.json}; a custom file can be supplied
  * for tests. Nothing secret is written here — see {@link S3Profile} — so the file is safe to sync
- * or check into a dotfiles repository.
+ * or check into a dotfiles repository. A profile that opts into remembering its secret records only
+ * that preference; the key itself is held by {@link SecretStore} in a separate file that is not
+ * safe to sync, and is not part of this one.
  *
  * <p>Loading is deliberately forgiving: a corrupt or half-written file yields an empty list rather
  * than an error, duplicate ids collapse, and a profile missing its id gets a fresh one. A broken

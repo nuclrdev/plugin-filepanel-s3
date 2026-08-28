@@ -55,9 +55,11 @@ public final class CredentialsResolver {
 
 	private final AwsConfigFiles awsFiles;
 
-	/** Create a resolver reading the user's real AWS configuration files. */
+	private final SecretStore secrets;
+
+	/** Create a resolver reading the user's real AWS configuration files and saved secrets. */
 	public CredentialsResolver() {
-		this(AwsConfigFiles.user());
+		this(AwsConfigFiles.user(), SecretStore.defaultStore());
 	}
 
 	/**
@@ -66,7 +68,18 @@ public final class CredentialsResolver {
 	 * @param awsFiles the shared-configuration reader to consult
 	 */
 	public CredentialsResolver(AwsConfigFiles awsFiles) {
+		this(awsFiles, SecretStore.defaultStore());
+	}
+
+	/**
+	 * Create a resolver over explicit AWS configuration files and secret store, as tests do.
+	 *
+	 * @param awsFiles the shared-configuration reader to consult
+	 * @param secrets  where remembered secrets are kept
+	 */
+	public CredentialsResolver(AwsConfigFiles awsFiles, SecretStore secrets) {
 		this.awsFiles = awsFiles;
+		this.secrets = secrets;
 	}
 
 	/**
@@ -114,6 +127,38 @@ public final class CredentialsResolver {
 		CACHE.remove(profile.getId());
 		if (profile.getAuthMode() == S3Profile.AuthMode.ACCESS_KEY) {
 			SecretCache.drop(profile.getId());
+		}
+	}
+
+	/**
+	 * Drop everything held for a profile whose credentials the endpoint has just <em>rejected</em>,
+	 * including any secret saved on this machine.
+	 *
+	 * <p>Distinct from {@link #invalidate} on purpose. Invalidating is routine — a profile was
+	 * edited, a session ended — and must leave a saved secret alone, or editing a profile's region
+	 * would silently throw its key away. A rejection is different: a saved key that no longer works
+	 * is worse than none, because it would be re-offered on every attempt instead of the user being
+	 * asked for the new one.
+	 *
+	 * @param profile the profile whose credentials were rejected
+	 */
+	public void rejected(S3Profile profile) {
+
+		if (profile == null) {
+			return;
+		}
+		invalidate(profile);
+
+		if (profile.getAuthMode() != S3Profile.AuthMode.ACCESS_KEY) {
+			return;
+		}
+		try {
+			if (secrets.has(profile.getId())) {
+				log.info("Forgetting the saved secret for {}: the endpoint rejected it", profile.displayName());
+				secrets.remove(profile.getId());
+			}
+		} catch (IOException e) {
+			log.warn("Could not forget the saved secret for {}: {}", profile.displayName(), e.getMessage());
 		}
 	}
 
@@ -171,6 +216,19 @@ public final class CredentialsResolver {
 		String secret = SecretCache.secretKey(profile.getId());
 		String sessionToken = SecretCache.sessionToken(profile.getId());
 
+		// Anything remembered on this machine counts as already entered, which is the whole point
+		// of remembering it: the prompt below is never reached on the second run. Deliberately not
+		// gated on the profile's own flag — the store only ever holds what the user asked it to
+		// hold, and one source of truth cannot disagree with itself.
+		if (secret == null || secret.isBlank()) {
+			SecretStore.Entry saved = secrets.get(profile.getId());
+			if (saved != null && saved.secretAccessKey() != null && !saved.secretAccessKey().isBlank()) {
+				secret = saved.secretAccessKey();
+				sessionToken = saved.sessionToken();
+				SecretCache.put(profile.getId(), secret, sessionToken);
+			}
+		}
+
 		if (secret == null || secret.isBlank()) {
 			SecretPrompt.Entry entered = SecretPrompt.ask(profile, false);
 			if (entered == null) {
@@ -179,9 +237,31 @@ public final class CredentialsResolver {
 			secret = entered.secretAccessKey();
 			sessionToken = entered.sessionToken();
 			SecretCache.put(profile.getId(), secret, sessionToken);
+			remember(profile, entered.remember(), secret, sessionToken);
 		}
 
 		return new AwsCredentials(accessKeyId.trim(), secret, sessionToken, null);
+	}
+
+	/**
+	 * Act on the choice made in the prompt: save the secret for next time, or make sure nothing
+	 * stale is left behind for a profile the user has decided not to remember.
+	 *
+	 * <p>A failure to write is reported to the log and no further: the credentials in hand are
+	 * good, and the panel opening is worth more to the user than the convenience they asked for.
+	 */
+	private void remember(S3Profile profile, boolean remember, String secret, String sessionToken) {
+
+		try {
+			if (remember) {
+				secrets.put(profile.getId(), secret, sessionToken);
+				log.info("Saved the secret access key for {} on this machine", profile.displayName());
+			} else {
+				secrets.remove(profile.getId());
+			}
+		} catch (IOException e) {
+			log.warn("Could not save the secret access key for {}: {}", profile.displayName(), e.getMessage());
+		}
 	}
 
 	/** A named {@code ~/.aws} profile: keys straight from the file, anything else through the CLI. */

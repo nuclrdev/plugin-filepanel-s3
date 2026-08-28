@@ -726,7 +726,7 @@ public final class S3Client {
 			S3Error error = classifyResponse(call, status, headers, response.body());
 			if (!credentialsRetried && error instanceof S3Error.NotAuthorized) {
 				credentialsRetried = true;
-				resolver.invalidate(profile);
+				resolver.rejected(profile);
 				log.info("S3 rejected the credentials for {}; resolving fresh ones and retrying",
 						profile.displayName());
 				continue;
@@ -783,7 +783,7 @@ public final class S3Client {
 			S3Error error = classifyResponse(call, status, headers, failureBody);
 			if (!credentialsRetried && error instanceof S3Error.NotAuthorized) {
 				credentialsRetried = true;
-				resolver.invalidate(profile);
+				resolver.rejected(profile);
 				continue;
 			}
 			return S3Result.err(error);

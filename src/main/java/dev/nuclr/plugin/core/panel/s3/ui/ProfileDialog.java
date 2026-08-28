@@ -57,7 +57,9 @@ import dev.nuclr.plugin.core.panel.s3.auth.S3Profile;
  * machine.
  *
  * <p>The secret access key can be typed here for convenience, but it is handed back to the caller
- * for in-memory caching and never becomes part of the saved profile — see {@link S3Profile}.
+ * rather than becoming part of the saved profile — see {@link S3Profile}. By default it is cached in
+ * memory for the session; ticking "remember" instead saves it to {@link SecretStore}, a separate
+ * encrypted file, so the profile file stays safe to sync either way.
  */
 public final class ProfileDialog extends JDialog {
 
@@ -100,8 +102,10 @@ public final class ProfileDialog extends JDialog {
 	 * @param profile         the profile to save
 	 * @param secretAccessKey the secret entered, or {@code null} if none was
 	 * @param sessionToken    the session token entered, or {@code null} if none was
+	 * @param rememberSecret  whether the secret should be saved on this machine
 	 */
-	public record Result(S3Profile profile, String secretAccessKey, String sessionToken) {}
+	public record Result(S3Profile profile, String secretAccessKey, String sessionToken,
+			boolean rememberSecret) {}
 
 	private final JTextField nameField = new JTextField(26);
 
@@ -114,6 +118,8 @@ public final class ProfileDialog extends JDialog {
 	private final JPasswordField secretKeyField = new JPasswordField(26);
 	private final JPasswordField sessionTokenField = new JPasswordField(26);
 	private final JComboBox<String> awsProfileField = new JComboBox<>();
+	private final JCheckBox rememberSecretField =
+			new JCheckBox("Remember the secret on this machine (saved encrypted; do not tick on a shared login)");
 
 	private final JComboBox<String> regionField = new JComboBox<>(new DefaultComboBoxModel<>(COMMON_REGIONS));
 	private final JTextField endpointField = new JTextField(26);
@@ -138,6 +144,7 @@ public final class ProfileDialog extends JDialog {
 
 		nameField.setText(profile.getName());
 		accessKeyIdField.setText(profile.getAccessKeyId());
+		rememberSecretField.setSelected(profile.isRememberSecret());
 		endpointField.setText(profile.getEndpoint());
 		pathStyleField.setSelected(profile.isPathStyleAccess());
 		bucketField.setText(profile.getBucket());
@@ -191,6 +198,7 @@ public final class ProfileDialog extends JDialog {
 		row = addRow(constraints, row, "Access key id:", accessKeyIdField);
 		row = addRow(constraints, row, "Secret access key:", secretKeyField);
 		row = addRow(constraints, row, "Session token (optional):", sessionTokenField);
+		row = addWide(constraints, row, rememberSecretField);
 		row = addRow(constraints, row, "AWS profile:", awsProfileField);
 
 		row = addSeparator(constraints, row, "Endpoint");
@@ -202,6 +210,7 @@ public final class ProfileDialog extends JDialog {
 		row = addRow(constraints, row, "Bucket:", bucketField);
 		row = addRow(constraints, row, "Prefix:", prefixField);
 
+		rememberSecretField.addActionListener(event -> updateAuthEnablement());
 		accessKeyAuth.addActionListener(event -> updateAuthEnablement());
 		awsProfileAuth.addActionListener(event -> updateAuthEnablement());
 		ssoAuth.addActionListener(event -> updateAuthEnablement());
@@ -290,10 +299,13 @@ public final class ProfileDialog extends JDialog {
 		accessKeyIdField.setEnabled(useAccessKey);
 		secretKeyField.setEnabled(useAccessKey);
 		sessionTokenField.setEnabled(useAccessKey);
+		rememberSecretField.setEnabled(useAccessKey);
 		awsProfileField.setEnabled(useAwsProfile);
 
 		if (useAccessKey) {
-			authNote.setText("The secret is kept in memory for this session only and is never saved to disk.");
+			authNote.setText(rememberSecretField.isSelected()
+					? "The secret is saved encrypted under your home directory, readable by programs running as you."
+					: "The secret is kept in memory for this session only and is never saved to disk.");
 		} else if (awsProfileAuth.isSelected()) {
 			authNote.setText("Credentials are read from ~/.aws; profiles that assume a role use the AWS CLI.");
 		} else if (ssoAuth.isSelected()) {
@@ -313,6 +325,7 @@ public final class ProfileDialog extends JDialog {
 		profile.setId(original.getId());
 		profile.setName(trimmed(nameField.getText(), NAME_MAX_LENGTH));
 		profile.setAuthMode(mode);
+		profile.setRememberSecret(mode == S3Profile.AuthMode.ACCESS_KEY && rememberSecretField.isSelected());
 		profile.setRegion(text(regionField.getSelectedItem()));
 		profile.setEndpoint(endpointField.getText().trim());
 		profile.setPathStyleAccess(pathStyleField.isSelected());
@@ -371,7 +384,7 @@ public final class ProfileDialog extends JDialog {
 			}
 		}
 
-		this.result = new Result(profile, secret, sessionToken);
+		this.result = new Result(profile, secret, sessionToken, profile.isRememberSecret());
 		dispose();
 	}
 

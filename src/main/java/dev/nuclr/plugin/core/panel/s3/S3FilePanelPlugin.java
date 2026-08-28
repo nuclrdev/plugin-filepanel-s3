@@ -45,6 +45,7 @@ import dev.nuclr.plugin.core.panel.s3.api.S3Xml;
 import dev.nuclr.plugin.core.panel.s3.auth.AwsCli;
 import dev.nuclr.plugin.core.panel.s3.auth.AwsConfigFiles;
 import dev.nuclr.plugin.core.panel.s3.auth.S3Profile;
+import dev.nuclr.plugin.core.panel.s3.auth.SecretCache;
 import dev.nuclr.plugin.core.panel.s3.find.S3FindDialog;
 import dev.nuclr.plugin.core.panel.s3.find.S3FindRequest;
 import dev.nuclr.plugin.core.panel.s3.find.S3FindResultsWindow;
@@ -626,10 +627,22 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 			Dialogs.error("S3 profile", "Could not save the profile:\n" + e.getMessage());
 			return false;
 		}
-		// A secret typed in the dialog is cached for this session and never written to the file.
+		// A secret typed in the dialog never goes into the profile file. It is cached for this
+		// session, and saved to the separate encrypted store only when the user asked for that.
+		String profileId = result.profile().getId();
 		if (result.secretAccessKey() != null) {
-			dev.nuclr.plugin.core.panel.s3.auth.SecretCache.put(
-					result.profile().getId(), result.secretAccessKey(), result.sessionToken());
+			SecretCache.put(profileId, result.secretAccessKey(), result.sessionToken());
+		}
+		try {
+			if (result.rememberSecret() && result.secretAccessKey() != null) {
+				S3Clients.secrets().put(profileId, result.secretAccessKey(), result.sessionToken());
+			} else if (!result.rememberSecret()) {
+				// Unticking it is how the user withdraws a secret they saved earlier.
+				S3Clients.secrets().remove(profileId);
+			}
+		} catch (IOException e) {
+			log.warn("Could not update the saved secret for {}: {}", result.profile().displayName(), e.getMessage());
+			Dialogs.error("S3 profile", "The profile was saved, but the secret could not be:\n" + e.getMessage());
 		}
 		return true;
 	}
@@ -654,6 +667,12 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 			return;
 		}
 		S3Clients.forget(profile.getId());
+		try {
+			// The profile is gone; a secret saved for it would only outlive what it was for.
+			S3Clients.secrets().remove(profile.getId());
+		} catch (IOException e) {
+			log.warn("Could not remove the saved secret for {}: {}", profile.displayName(), e.getMessage());
+		}
 		requestRefresh(data, null);
 	}
 

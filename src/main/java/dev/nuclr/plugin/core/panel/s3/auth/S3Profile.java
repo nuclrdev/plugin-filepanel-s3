@@ -30,9 +30,15 @@ import lombok.Data;
  *
  * <p>Persisted to {@code ~/.nuclr/s3/profiles.json} by {@link S3ProfileStore}. The
  * <b>secret access key is deliberately not a field of this class</b> — it is prompted for and held
- * in memory for the session only (see {@link SecretCache}), the same rule the Net panel applies to
- * SSH passwords. Everything here is either public (an access key id, a region, an endpoint) or a
- * pointer to credentials that live somewhere else entirely (an AWS profile name).
+ * in memory for the session (see {@link SecretCache}), the same rule the Net panel applies to SSH
+ * passwords. Everything here is either public (an access key id, a region, an endpoint) or a
+ * pointer to credentials that live somewhere else entirely (an AWS profile name), which is what
+ * keeps the profile file safe to sync.
+ *
+ * <p>A profile may opt into {@link #isRememberSecret() remembering} its secret so it is asked for
+ * once rather than once per session. Even then the secret is not written here: it goes to
+ * {@link SecretStore}, a separate, encrypted, owner-only file. This class carries the preference,
+ * never the key.
  *
  * <p>The four authentication modes cover how people actually reach S3: keys typed in, the AWS
  * files they already have, an SSO sign-in through their identity provider, and the ambient
@@ -87,6 +93,15 @@ public class S3Profile implements Serializable {
 
 	/** Access key id for {@link AuthMode#ACCESS_KEY}; the secret is never stored here. */
 	private String accessKeyId = "";
+
+	/**
+	 * Whether the secret access key may be saved on this machine, so it is asked for once rather
+	 * than once per session.
+	 *
+	 * <p>Only the flag lives in this file — it is a preference, not a secret. The key itself goes
+	 * to {@link SecretStore}, which is deliberately a different file with different handling.
+	 */
+	private boolean rememberSecret;
 
 	/** The {@code ~/.aws} profile name for {@link AuthMode#AWS_PROFILE} and {@link AuthMode#SSO}. */
 	private String awsProfileName = "";

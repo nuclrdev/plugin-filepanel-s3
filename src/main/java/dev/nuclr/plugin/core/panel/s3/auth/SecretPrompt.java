@@ -37,8 +37,9 @@ import lombok.extern.slf4j.Slf4j;
  * The modal prompt for a profile's secret access key.
  *
  * <p>Shown the first time a session opens an {@link S3Profile.AuthMode#ACCESS_KEY} profile, and
- * again after the endpoint rejects the credentials. What is typed goes into {@link SecretCache} and
- * nowhere else — never to the profile file, never to a log.
+ * again after the endpoint rejects the credentials. What is typed goes into {@link SecretCache} —
+ * never to the profile file, never to a log — and, only if the user ticks the box, to
+ * {@link SecretStore} so this is the last time they are asked.
  *
  * <p>Marshals to the event dispatch thread and blocks for the answer, so it is safe to call from the
  * background thread that is trying to sign a request.
@@ -53,8 +54,9 @@ public final class SecretPrompt {
 	 *
 	 * @param secretAccessKey the secret access key
 	 * @param sessionToken    the session token for temporary credentials, or {@code null}
+	 * @param remember        whether to save the secret on this machine rather than ask again
 	 */
-	public record Entry(String secretAccessKey, String sessionToken) {}
+	public record Entry(String secretAccessKey, String sessionToken, boolean remember) {}
 
 	/**
 	 * Ask for the secret access key belonging to a profile.
@@ -74,6 +76,8 @@ public final class SecretPrompt {
 		var secretField = new JPasswordField(32);
 		var tokenField = new JPasswordField(32);
 		var temporary = new JCheckBox("These are temporary credentials (session token)");
+		var remember = new JCheckBox("Save this key on this machine and stop asking",
+				profile.isRememberSecret());
 
 		tokenField.setEnabled(false);
 		temporary.addActionListener(event -> {
@@ -101,7 +105,13 @@ public final class SecretPrompt {
 		form.add(temporary, constraints);
 		constraints.gridwidth = 1;
 
-		addRow(form, constraints, row, "Session token:", tokenField);
+		row = addRow(form, constraints, row, "Session token:", tokenField);
+
+		constraints.gridx = 0;
+		constraints.gridy = row;
+		constraints.gridwidth = 2;
+		form.add(remember, constraints);
+		constraints.gridwidth = 1;
 
 		var message = new JPanel(new BorderLayout(0, 10));
 		message.add(new JLabel(retry
@@ -110,8 +120,10 @@ public final class SecretPrompt {
 				: "<html>Enter the secret access key for <b>" + escape(profile.displayName())
 						+ "</b>:</html>"), BorderLayout.NORTH);
 		message.add(form, BorderLayout.CENTER);
-		message.add(new JLabel("<html><small>Held in memory for this session only; never written to disk.</small></html>"),
-				BorderLayout.SOUTH);
+		var note = new JLabel();
+		remember.addActionListener(event -> note.setText(rememberNote(remember.isSelected())));
+		note.setText(rememberNote(remember.isSelected()));
+		message.add(note, BorderLayout.SOUTH);
 
 		// showConfirmDialog offers no hook to focus a field inside a custom panel, and timing a
 		// requestFocusInWindow() around the modal call races with the option pane's own focusing.
@@ -140,7 +152,20 @@ public final class SecretPrompt {
 			return null;
 		}
 		char[] token = temporary.isSelected() ? tokenField.getPassword() : new char[0];
-		return new Entry(new String(secret), token.length == 0 ? null : new String(token));
+		return new Entry(new String(secret), token.length == 0 ? null : new String(token), remember.isSelected());
+	}
+
+	/**
+	 * Say plainly what each choice does with the key.
+	 *
+	 * <p>Saving it is a real trade and the user is told so at the moment they make it, rather than
+	 * discovering later that a credential is sitting in their home directory.
+	 */
+	private static String rememberNote(boolean remember) {
+		return remember
+				? "<html><small>Saved encrypted under your home directory, readable by programs "
+						+ "running as you.<br>Untick to keep it in memory for this session only.</small></html>"
+				: "<html><small>Held in memory for this session only; never written to disk.</small></html>";
 	}
 
 	private static int addRow(JPanel form, GridBagConstraints constraints, int row, String label, Component field) {

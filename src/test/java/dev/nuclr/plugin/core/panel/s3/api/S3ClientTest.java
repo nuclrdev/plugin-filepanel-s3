@@ -24,10 +24,20 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayInputStream;
+import java.net.InetSocketAddress;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.sun.net.httpserver.HttpServer;
+
 import dev.nuclr.plugin.core.panel.s3.S3Error;
+import dev.nuclr.plugin.core.panel.s3.auth.CredentialsResolver;
+import dev.nuclr.plugin.core.panel.s3.auth.S3Profile;
+import dev.nuclr.plugin.core.panel.s3.auth.SecretCache;
 
 /**
  * Covers the client's pure decisions — the ones that do not need a network round trip: how an upload
@@ -168,5 +178,123 @@ class S3ClientTest {
 		assertFalse(text.contains("the-secret-value"));
 		assertFalse(text.contains("the-token-value"));
 		assertTrue(text.contains("AKIAEXAMPLE"));
+	}
+
+	@Test
+	@DisplayName("An empty file uploads as an empty object rather than failing")
+	void uploadsAZeroLengthObject() throws Exception {
+
+		// A zero content length is not a missing one: the PUT still has to go out, and it has to
+		// carry Content-Length: 0 rather than being rejected before it is built.
+		var bodyLength = new AtomicInteger(-1);
+		var contentLength = new AtomicReference<String>();
+
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/", exchange -> {
+			bodyLength.set(exchange.getRequestBody().readAllBytes().length);
+			contentLength.set(exchange.getRequestHeaders().getFirst("Content-Length"));
+			exchange.sendResponseHeaders(200, -1);
+			exchange.close();
+		});
+		server.start();
+
+		try {
+			S3Client client = clientFor(server.getAddress().getPort());
+
+			S3Result<Long> result = client.upload("bucket", "empty.txt",
+					() -> new ByteArrayInputStream(new byte[0]), 0, null, null);
+
+			assertTrue(result.isOk(), () -> "upload failed: " + result.errorOrNull());
+			assertEquals(0L, result.orNull());
+			assertEquals(0, bodyLength.get());
+			assertEquals("0", contentLength.get());
+		} finally {
+			server.stop(0);
+			SecretCache.clear();
+			CredentialsResolver.clear();
+		}
+	}
+
+	@Test
+	@DisplayName("A file with content still uploads its bytes")
+	void uploadsANonEmptyObject() throws Exception {
+
+		var bodyLength = new AtomicInteger(-1);
+
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/", exchange -> {
+			bodyLength.set(exchange.getRequestBody().readAllBytes().length);
+			exchange.sendResponseHeaders(200, -1);
+			exchange.close();
+		});
+		server.start();
+
+		try {
+			S3Client client = clientFor(server.getAddress().getPort());
+			byte[] content = "hello".getBytes();
+
+			S3Result<Long> result = client.upload("bucket", "hello.txt",
+					() -> new ByteArrayInputStream(content), content.length, null, null);
+
+			assertTrue(result.isOk(), () -> "upload failed: " + result.errorOrNull());
+			assertEquals(content.length, bodyLength.get());
+		} finally {
+			server.stop(0);
+			SecretCache.clear();
+			CredentialsResolver.clear();
+		}
+	}
+
+	@Test
+	@DisplayName("A folder marker is still written as a zero-byte object")
+	void createsAFolderMarker() throws Exception {
+
+		// The folder placeholder shares the empty-body path with an empty file upload, so it is
+		// worth pinning that it still goes out as a PUT with no content.
+		var method = new AtomicReference<String>();
+		var contentLength = new AtomicReference<String>();
+		var bodyLength = new AtomicInteger(-1);
+
+		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/", exchange -> {
+			method.set(exchange.getRequestMethod());
+			contentLength.set(exchange.getRequestHeaders().getFirst("Content-Length"));
+			bodyLength.set(exchange.getRequestBody().readAllBytes().length);
+			exchange.sendResponseHeaders(200, -1);
+			exchange.close();
+		});
+		server.start();
+
+		try {
+			S3Client client = clientFor(server.getAddress().getPort());
+
+			S3Result<Void> result = client.createFolder("bucket", "reports/");
+
+			assertTrue(result.isOk(), () -> "createFolder failed: " + result.errorOrNull());
+			assertEquals("PUT", method.get());
+			assertEquals("0", contentLength.get());
+			assertEquals(0, bodyLength.get());
+		} finally {
+			server.stop(0);
+			SecretCache.clear();
+			CredentialsResolver.clear();
+		}
+	}
+
+	/** A client pointed at a local endpoint, signing with a throwaway key. */
+	private static S3Client clientFor(int port) {
+
+		S3Profile profile = new S3Profile();
+		profile.setId("s3-client-test");
+		profile.setAuthMode(S3Profile.AuthMode.ACCESS_KEY);
+		profile.setAccessKeyId("AKIAEXAMPLEEXAMPLE");
+		profile.setRegion("us-east-1");
+		profile.setEndpoint("http://127.0.0.1:" + port);
+		profile.setPathStyleAccess(true);
+
+		SecretCache.put(profile.getId(), "not-a-real-secret", null);
+		CredentialsResolver.clear();
+
+		return new S3Client(profile, new CredentialsResolver());
 	}
 }

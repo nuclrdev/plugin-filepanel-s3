@@ -628,6 +628,19 @@ public final class S3Client {
 		boolean isStreamed() {
 			return source != null;
 		}
+
+		/**
+		 * Whether this body carries nothing at all.
+		 *
+		 * <p>A streamed body of a known zero length counts: an empty source file is a legitimate
+		 * object to create, and it is told apart here from a body whose length is simply unknown.
+		 */
+		boolean isEmpty() {
+			if (source != null) {
+				return size == 0;
+			}
+			return bytes == null || bytes.length == 0;
+		}
 	}
 
 	/** A completed response with its body already read into memory. */
@@ -798,12 +811,14 @@ public final class S3Client {
 		headersToSign.putAll(call.headers());
 
 		String payloadHash;
-		if (call.body().isStreamed()) {
-			payloadHash = SigV4.UNSIGNED_PAYLOAD;
-		} else if (call.body().bytes() != null && call.body().bytes().length > 0) {
-			payloadHash = SigV4.sha256Hex(call.body().bytes());
-		} else {
+		if (call.body().isEmpty()) {
+			// Nothing to send: sign the hash of the empty string, the way every S3 client does
+			// for an empty object, rather than declaring an unsigned payload that is not there.
 			payloadHash = SigV4.EMPTY_BODY_SHA256;
+		} else if (call.body().isStreamed()) {
+			payloadHash = SigV4.UNSIGNED_PAYLOAD;
+		} else {
+			payloadHash = SigV4.sha256Hex(call.body().bytes());
 		}
 
 		SigV4.Signed signed = SigV4.forS3(target.region()).sign(call.method(), target.canonicalPath(),
@@ -815,7 +830,11 @@ public final class S3Client {
 		}
 
 		HttpRequest.BodyPublisher publisher;
-		if (call.body().isStreamed()) {
+		if (call.body().isEmpty()) {
+			// An empty file is still a real object and still needs its PUT. There is nothing to
+			// open and nothing to count, and fromPublisher rejects a zero content length.
+			publisher = HttpRequest.BodyPublishers.noBody();
+		} else if (call.body().isStreamed()) {
 			InputStream stream;
 			try {
 				stream = counting(call.body());
@@ -824,7 +843,7 @@ public final class S3Client {
 			}
 			// A known length lets the client send a fixed Content-Length rather than chunking,
 			// which some S3-compatible endpoints require.
-			publisher = call.body().size() >= 0
+			publisher = call.body().size() > 0
 					? HttpRequest.BodyPublishers.fromPublisher(
 							HttpRequest.BodyPublishers.ofInputStream(() -> stream), call.body().size())
 					: HttpRequest.BodyPublishers.ofInputStream(() -> stream);

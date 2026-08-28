@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "version": "${project.version}",
+  "platformSdkVersion": "${platform.sdk.version}",
+	"plugins": [
+		{
+			"class": "dev.nuclr.plugin.core.panel.s3.S3FilePanelPlugin",
+			"type": "FilePanel",
+			"id": "dev.nuclr.plugin.core.panel.s3",
+			"name": "S3 Remote Panel",
+			"version": "${project.version}",
+			"description": "AWS S3 browser: browse and manage S3 buckets, upload/download files, and perform S3 operations.",
+			"author": "Nuclr Development Team",
+			"license": "Apache-2.0",
+			"website": "https://nuclr.dev",
+			"pageUrl": "https://github.com/nuclrdev/plugin-filepanel-s3",
+			"docUrl": "https://github.com/nuclrdev/plugin-filepanel-s3",
+			"developer": "Official",
+			"singleton": false
+		}
+	]
+}

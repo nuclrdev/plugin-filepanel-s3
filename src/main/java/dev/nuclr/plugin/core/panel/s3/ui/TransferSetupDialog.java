@@ -54,6 +54,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class TransferSetupDialog {
 
+	/** Transfers run at once unless the user picks otherwise. */
+	public static final int DEFAULT_CONCURRENCY = 4;
+
 	private TransferSetupDialog() {}
 
 	/**
@@ -61,15 +64,17 @@ public final class TransferSetupDialog {
 	 *
 	 * @param destination the folder to write into
 	 * @param existing    what to do about existing files, or {@code null} to ask each time
+	 * @param concurrency how many objects to fetch at once
 	 */
-	public record Download(Path destination, ConflictDialog.Action existing) {}
+	public record Download(Path destination, ConflictDialog.Action existing, int concurrency) {}
 
 	/**
 	 * The choices for a transfer into S3.
 	 *
-	 * @param existing what to do about existing keys, or {@code null} to ask each time
+	 * @param existing    what to do about existing keys, or {@code null} to ask each time
+	 * @param concurrency how many files to send at once
 	 */
-	public record Upload(ConflictDialog.Action existing) {}
+	public record Upload(ConflictDialog.Action existing, int concurrency) {}
 
 	/**
 	 * Ask where to put items being copied out of S3.
@@ -108,6 +113,8 @@ public final class TransferSetupDialog {
 		var destinationPanel = labelled(title + ' ' + header + " to:", destinationField);
 		var existing = existingCombo();
 		var existingRow = existingRow(existing);
+		var concurrency = concurrencyCombo();
+		var concurrencyRow = concurrencyRow(concurrency, "Fetch at once:");
 
 		var confirmButton = new JButton(title);
 		var cancelButton = new JButton("Cancel");
@@ -118,12 +125,13 @@ public final class TransferSetupDialog {
 			if (destination == null) {
 				return; // empty or unusable; leave the dialog open
 			}
-			chosen[0] = new Download(destination, existingAction(existing.getSelectedIndex()));
+			chosen[0] = new Download(destination, existingAction(existing.getSelectedIndex()),
+					concurrencyValue(concurrency));
 			dialog.dispose();
 		});
 		cancelButton.addActionListener(event -> dialog.dispose());
 
-		layout(dialog, owner, confirmButton, cancelButton, destinationPanel, existingRow);
+		layout(dialog, owner, confirmButton, cancelButton, destinationPanel, existingRow, concurrencyRow);
 		SwingUtilities.invokeLater(destinationField::requestFocusInWindow);
 		dialog.setVisible(true);
 
@@ -140,18 +148,20 @@ public final class TransferSetupDialog {
 		var destinationPanel = labelled(title + ' ' + header + " to:", destinationField);
 		var existing = existingCombo();
 		var existingRow = existingRow(existing);
+		var concurrency = concurrencyCombo();
+		var concurrencyRow = concurrencyRow(concurrency, "Send at once:");
 
 		var confirmButton = new JButton(title);
 		var cancelButton = new JButton("Cancel");
 		final Upload[] chosen = new Upload[1];
 
 		confirmButton.addActionListener(event -> {
-			chosen[0] = new Upload(existingAction(existing.getSelectedIndex()));
+			chosen[0] = new Upload(existingAction(existing.getSelectedIndex()), concurrencyValue(concurrency));
 			dialog.dispose();
 		});
 		cancelButton.addActionListener(event -> dialog.dispose());
 
-		layout(dialog, owner, confirmButton, cancelButton, destinationPanel, existingRow);
+		layout(dialog, owner, confirmButton, cancelButton, destinationPanel, existingRow, concurrencyRow);
 		SwingUtilities.invokeLater(confirmButton::requestFocusInWindow);
 		dialog.setVisible(true);
 
@@ -179,6 +189,34 @@ public final class TransferSetupDialog {
 		return row;
 	}
 
+	/**
+	 * How many transfers to run at once.
+	 *
+	 * <p>Four by default: enough to cover the round-trip latency that dominates a transfer of many
+	 * small objects, and low enough that a modest connection is not oversubscribed into timeouts.
+	 * Set it to one to get the old strictly-sequential behaviour back.
+	 */
+	private static JComboBox<String> concurrencyCombo() {
+		var combo = new JComboBox<>(new String[] {"1", "2", "4", "8", "16"});
+		combo.setSelectedItem(String.valueOf(DEFAULT_CONCURRENCY));
+		return combo;
+	}
+
+	private static int concurrencyValue(JComboBox<String> combo) {
+		try {
+			return Math.max(1, Integer.parseInt(String.valueOf(combo.getSelectedItem())));
+		} catch (NumberFormatException e) {
+			return DEFAULT_CONCURRENCY;
+		}
+	}
+
+	private static JPanel concurrencyRow(JComboBox<String> concurrency, String label) {
+		var row = new JPanel(new BorderLayout(8, 0));
+		row.add(new JLabel(label), BorderLayout.WEST);
+		row.add(concurrency, BorderLayout.CENTER);
+		return row;
+	}
+
 	private static JPanel labelled(String label, Component field) {
 		var panel = new JPanel(new BorderLayout(0, 4));
 		panel.add(new JLabel(label), BorderLayout.NORTH);
@@ -187,7 +225,7 @@ public final class TransferSetupDialog {
 	}
 
 	private static void layout(JDialog dialog, Window owner, JButton confirmButton, JButton cancelButton,
-			JPanel destinationPanel, JPanel existingRow) {
+			JPanel destinationPanel, JPanel existingRow, JPanel concurrencyRow) {
 
 		dialog.getRootPane().registerKeyboardAction(event -> dialog.dispose(),
 				KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -204,6 +242,9 @@ public final class TransferSetupDialog {
 		body.add(destinationPanel);
 		body.add(Box.createVerticalStrut(10));
 		body.add(existingRow);
+		concurrencyRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(Box.createVerticalStrut(10));
+		body.add(concurrencyRow);
 
 		var content = new JPanel(new BorderLayout(0, 10));
 		content.add(body, BorderLayout.CENTER);

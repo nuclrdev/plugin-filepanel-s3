@@ -28,6 +28,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 import dev.nuclr.platform.plugin.BaseNuclrPlugin;
@@ -131,56 +132,81 @@ public final class S3CopyService {
 		var failures = new ArrayList<String>();
 		int[] transferred = {0};
 		ProgressDialog.run(title(), callback -> transferred[0] = runDownload(
-				sources, options.destination(), options.existing(), callback, failures, context, sourceUuid));
+				sources, options.destination(), options.existing(), options.concurrency(),
+				callback, failures, context, sourceUuid));
 
 		Selections.refreshPanel(context, other.uuid());
 		reportFailures(failures);
 		return transferred[0] > 0;
 	}
 
-	/** Download each selected object, and each object beneath each selected folder. */
+	/**
+	 * Download each selected object, and each object beneath each selected folder.
+	 *
+	 * <p>Two phases. The first walks the selection and settles every question that needs a person:
+	 * which keys exist, where each one lands, what to do about a clash. The second moves the bytes,
+	 * several at a time. Keeping them apart is what makes the parallelism safe — by the time
+	 * anything runs concurrently there is nothing left to ask.
+	 */
 	private int runDownload(List<NuclrResource> sources, Path destination, ConflictDialog.Action existingMode,
-			NuclrPluginCallback callback, List<String> failures, NuclrPluginContext context, String sourceUuid) {
+			int concurrency, NuclrPluginCallback callback, List<String> failures,
+			NuclrPluginContext context, String sourceUuid) {
 
 		var conflicts = new ConflictDialog();
-		int transferred = 0;
+		var tasks = new ArrayList<ParallelTransfers.Task>();
+		var groups = new ArrayList<NuclrResource>();
+		var groupClients = new ArrayList<S3Client>();
 
-		for (int i = 0; i < sources.size(); i++) {
+		callback.onStart("Preparing " + title().toLowerCase(java.util.Locale.ROOT) + "…");
+
+		for (NuclrResource source : sources) {
 
 			if (callback.isCancelled()) {
-				break;
+				return 0;
 			}
-			NuclrResource source = sources.get(i);
-			String profileId = S3Resource.profileId(source);
-			String bucket = S3Resource.bucketName(source);
-			S3Client client = S3Clients.byProfileId(profileId);
+
+			S3Client client = S3Clients.byProfileId(S3Resource.profileId(source));
 			if (client == null) {
 				failures.add(source.getName() + " (its connection profile is gone)");
 				continue;
 			}
 
-			callback.onStart(title() + "ing " + source.getName() + " (" + (i + 1) + '/' + sources.size() + ')');
+			int group = groups.size();
+			Outcome planned = S3Resource.isObjectDir(source)
+					? planFolderDownload(client, source, destination, existingMode, conflicts, group, tasks,
+							failures, callback)
+					: planObjectDownload(client, S3Resource.bucketName(source), S3Resource.objectKey(source),
+							source.getName(), destination, source.getLength(), existingMode, conflicts,
+							group, tasks, failures);
 
-			Outcome outcome = S3Resource.isObjectDir(source)
-					? downloadFolder(client, source, destination, existingMode, conflicts, callback, failures)
-					: downloadObject(client, bucket, S3Resource.objectKey(source), source.getName(),
-							destination, existingMode, conflicts, callback, failures);
-
-			switch (outcome) {
-				case OK -> {
-					transferred++;
-					// For a move, the mark stays put when the source could not be removed: the item
-					// is still there, and the panel should keep showing it as selected.
-					if (!moving || deleteSource(client, source, failures)) {
-						Selections.unmark(context, sourceUuid, source);
-					}
-				}
-				case CANCELLED -> {
-					log.info("S3 {} cancelled after {} item(s)", title().toLowerCase(java.util.Locale.ROOT), transferred);
-					return transferred;
-				}
-				case FAILED -> { /* already recorded in failures */ }
+			if (planned == Outcome.CANCELLED) {
+				return 0;
 			}
+			if (planned == Outcome.OK) {
+				groups.add(source);
+				groupClients.add(client);
+			}
+		}
+
+		ParallelTransfers.Summary summary =
+				ParallelTransfers.run(tasks, concurrency, callback, title() + "ing");
+
+		int transferred = 0;
+		for (int group = 0; group < groups.size(); group++) {
+			if (!summary.groupSucceeded(group)) {
+				continue;
+			}
+			transferred++;
+			// For a move, the mark stays put when the source could not be removed: the item is
+			// still there, and the panel should keep showing it as selected.
+			if (!moving || deleteSource(groupClients.get(group), groups.get(group), failures)) {
+				Selections.unmark(context, sourceUuid, groups.get(group));
+			}
+		}
+
+		if (summary.cancelled()) {
+			log.info("S3 {} cancelled after {} item(s)", title().toLowerCase(java.util.Locale.ROOT), transferred);
+			return transferred;
 		}
 
 		log.info("S3 {} out finished: {} item(s) transferred, {} failed",
@@ -188,15 +214,16 @@ public final class S3CopyService {
 		return transferred;
 	}
 
-	/** Recreate a bucket prefix as a local directory tree. */
-	private Outcome downloadFolder(S3Client client, NuclrResource folder, Path destination,
-			ConflictDialog.Action existingMode, ConflictDialog conflicts, NuclrPluginCallback callback,
-			List<String> failures) {
+	/** Plan a bucket prefix as a local directory tree: make the folders, queue the objects. */
+	private Outcome planFolderDownload(S3Client client, NuclrResource folder, Path destination,
+			ConflictDialog.Action existingMode, ConflictDialog conflicts, int group,
+			List<ParallelTransfers.Task> tasks, List<String> failures, NuclrPluginCallback callback) {
 
 		String bucket = S3Resource.bucketName(folder);
 		String prefix = S3Resource.objectPrefix(folder);
 		String folderName = stripSlash(folder.getName());
 
+		// Listing a deep prefix is itself slow enough to want cancelling.
 		S3Result<List<S3ObjectEntry>> contents = S3Walk.collect(client, bucket, prefix, callback::isCancelled);
 		if (contents.isCancelled()) {
 			return Outcome.CANCELLED;
@@ -216,9 +243,6 @@ public final class S3CopyService {
 
 		for (S3ObjectEntry entry : contents.orNull()) {
 
-			if (callback.isCancelled()) {
-				return Outcome.CANCELLED;
-			}
 			String relative = S3Walk.relativeKey(entry.key(), prefix);
 			if (relative.isEmpty()) {
 				continue;
@@ -242,10 +266,10 @@ public final class S3CopyService {
 				continue;
 			}
 
-			callback.onStart(title() + "ing " + relative);
-			Outcome outcome = downloadObject(client, bucket, entry.key(), target.getFileName().toString(),
-					target.getParent(), existingMode, conflicts, callback, failures);
-			if (outcome == Outcome.CANCELLED) {
+			Outcome planned = planObjectDownload(client, bucket, entry.key(),
+					target.getFileName().toString(), target.getParent(), entry.size(),
+					existingMode, conflicts, group, tasks, failures);
+			if (planned == Outcome.CANCELLED) {
 				return Outcome.CANCELLED;
 			}
 		}
@@ -253,10 +277,15 @@ public final class S3CopyService {
 		return Outcome.OK;
 	}
 
-	/** Download one object into a local directory, resolving any clash first. */
-	private Outcome downloadObject(S3Client client, String bucket, String key, String name, Path directory,
-			ConflictDialog.Action existingMode, ConflictDialog conflicts, NuclrPluginCallback callback,
-			List<String> failures) {
+	/**
+	 * Settle where one object will land, and queue the fetch.
+	 *
+	 * <p>Everything interactive happens here, on the planning thread: the clash is resolved and the
+	 * final name chosen, so what comes out the other side is a task that only has to move bytes.
+	 */
+	private Outcome planObjectDownload(S3Client client, String bucket, String key, String name, Path directory,
+			long size, ConflictDialog.Action existingMode, ConflictDialog conflicts, int group,
+			List<ParallelTransfers.Task> tasks, List<String> failures) {
 
 		if (key == null) {
 			failures.add(name + " (not a downloadable object)");
@@ -301,23 +330,61 @@ public final class S3CopyService {
 			}
 		}
 
+		final Path plannedTarget = target;
+		final boolean appendMode = append;
+
+		tasks.add(new ParallelTransfers.Task() {
+
+			@Override
+			public String name() {
+				return name;
+			}
+
+			@Override
+			public int group() {
+				return group;
+			}
+
+			@Override
+			public long size() {
+				return size;
+			}
+
+			@Override
+			public Outcome transfer(S3Client.ProgressListener progress, BooleanSupplier cancelled) {
+				return fetchObject(client, bucket, key, name, directory, plannedTarget, appendMode,
+						progress, cancelled, failures);
+			}
+		});
+
+		return Outcome.OK;
+	}
+
+	/**
+	 * Fetch one object to its already-decided target. Safe to run beside others: it touches only its
+	 * own files and asks nothing.
+	 */
+	private Outcome fetchObject(S3Client client, String bucket, String key, String name, Path directory,
+			Path target, boolean append, S3Client.ProgressListener progress, BooleanSupplier cancelled,
+			List<String> failures) {
+
 		// Download beside the target and move it into place, so an interrupted transfer never
 		// leaves a half-written file wearing the real name.
 		Path temp;
 		try {
 			temp = Files.createTempFile(directory, "nuclr-s3-", ".part");
 		} catch (IOException e) {
-			failures.add(name + " (" + e.getMessage() + ')');
+			record(failures, name, e.getMessage());
 			return Outcome.FAILED;
 		}
 
 		try {
-			S3Result<Long> result = client.downloadToFile(bucket, key, temp, callback::onProgress, callback::isCancelled);
+			S3Result<Long> result = client.downloadToFile(bucket, key, temp, progress, cancelled);
 			if (result.isCancelled()) {
 				return Outcome.CANCELLED;
 			}
 			if (!result.isOk()) {
-				failures.add(name + " (" + result.errorOrNull().describe() + ')');
+				record(failures, name, result.errorOrNull().describe());
 				return Outcome.FAILED;
 			}
 
@@ -331,7 +398,7 @@ public final class S3CopyService {
 			return Outcome.OK;
 
 		} catch (IOException e) {
-			failures.add(name + " (" + e.getMessage() + ')');
+			record(failures, name, e.getMessage());
 			return Outcome.FAILED;
 		} finally {
 			try {
@@ -392,7 +459,8 @@ public final class S3CopyService {
 		Map<String, NuclrResource> existing = existingByName == null ? Map.of() : existingByName;
 
 		ProgressDialog.run(title(), callback -> uploaded[0] = runUpload(
-				client, bucket, prefix, sources, options.existing(), existing, callback, failures));
+				client, bucket, prefix, sources, options.existing(), existing, options.concurrency(),
+				callback, failures));
 
 		if (uploaded[0] > 0) {
 			Selections.refreshPanel(context, destinationUuid);
@@ -401,30 +469,40 @@ public final class S3CopyService {
 		return uploaded[0] > 0;
 	}
 
+	/**
+	 * Upload each selected file, and each file beneath each selected folder.
+	 *
+	 * <p>Planned first, then run several at a time, for the same reason as the download side: name
+	 * clashes are settled on one thread while the dialog can still be shown, and what reaches the
+	 * workers is a list of keys to write.
+	 */
 	private int runUpload(S3Client client, String bucket, String prefix, List<NuclrResource> sources,
-			ConflictDialog.Action existingMode, Map<String, NuclrResource> existingByName,
+			ConflictDialog.Action existingMode, Map<String, NuclrResource> existingByName, int concurrency,
 			NuclrPluginCallback callback, List<String> failures) {
 
 		var conflicts = new ConflictDialog();
 		Set<String> taken = new HashSet<>(existingByName.keySet());
-		int uploaded = 0;
+		var tasks = new ArrayList<ParallelTransfers.Task>();
+		var groups = new ArrayList<NuclrResource>();
 
-		for (int i = 0; i < sources.size(); i++) {
+		callback.onStart("Preparing " + title().toLowerCase(java.util.Locale.ROOT) + "…");
+
+		for (NuclrResource source : sources) {
 
 			if (callback.isCancelled()) {
-				break;
+				return 0;
 			}
-			NuclrResource source = sources.get(i);
+
 			String name = source.getName();
-			callback.onStart(title() + "ing " + name + " (" + (i + 1) + '/' + sources.size() + ')');
+			int group = groups.size();
 
 			if (source.isFolder()) {
-				Outcome outcome = uploadDirectory(client, bucket, prefix, source, callback, failures);
-				if (outcome == Outcome.CANCELLED) {
-					return uploaded;
+				Outcome planned = planDirectoryUpload(client, bucket, prefix, source, group, tasks, failures);
+				if (planned == Outcome.CANCELLED) {
+					return 0;
 				}
-				if (outcome == Outcome.OK) {
-					uploaded++;
+				if (planned == Outcome.OK) {
+					groups.add(source);
 					taken.add(name);
 				}
 				continue;
@@ -446,7 +524,7 @@ public final class S3CopyService {
 				}
 
 				if (action == ConflictDialog.Action.CANCEL) {
-					return uploaded;
+					return 0;
 				}
 				if (action == ConflictDialog.Action.SKIP) {
 					continue;
@@ -460,17 +538,25 @@ public final class S3CopyService {
 				// Objects cannot be appended to, so Append and Overwrite both replace the key.
 			}
 
-			Outcome outcome = uploadOne(client, source, bucket, prefix + name, callback, failures);
-			switch (outcome) {
-				case OK -> {
-					uploaded++;
-					taken.add(name);
-				}
-				case CANCELLED -> {
-					return uploaded;
-				}
-				case FAILED -> { /* already recorded */ }
+			taken.add(name);
+			groups.add(source);
+			queueUpload(client, source, bucket, prefix + name, source.getName(), sourceSize(source),
+					group, tasks, failures);
+		}
+
+		ParallelTransfers.Summary summary =
+				ParallelTransfers.run(tasks, concurrency, callback, title() + "ing");
+
+		int uploaded = 0;
+		for (int group = 0; group < groups.size(); group++) {
+			if (summary.groupSucceeded(group)) {
+				uploaded++;
 			}
+		}
+
+		if (summary.cancelled()) {
+			log.info("S3 {} cancelled after {} item(s)", title().toLowerCase(java.util.Locale.ROOT), uploaded);
+			return uploaded;
 		}
 
 		log.info("S3 {} in finished: {} item(s) uploaded, {} failed",
@@ -478,9 +564,9 @@ public final class S3CopyService {
 		return uploaded;
 	}
 
-	/** Upload a local directory tree, its structure becoming key structure. */
-	private Outcome uploadDirectory(S3Client client, String bucket, String prefix, NuclrResource source,
-			NuclrPluginCallback callback, List<String> failures) {
+	/** Plan a local directory tree, its structure becoming key structure. */
+	private Outcome planDirectoryUpload(S3Client client, String bucket, String prefix, NuclrResource source,
+			int group, List<ParallelTransfers.Task> tasks, List<String> failures) {
 
 		Path directory = source.getPath();
 		if (directory == null || !Files.isDirectory(directory)) {
@@ -509,12 +595,7 @@ public final class S3CopyService {
 
 		for (Path file : files) {
 
-			if (callback.isCancelled()) {
-				return Outcome.CANCELLED;
-			}
 			String relative = directory.relativize(file).toString().replace(java.io.File.separatorChar, '/');
-			String key = rootPrefix + relative;
-			callback.onStart(title() + "ing " + relative);
 
 			long size;
 			try {
@@ -524,24 +605,18 @@ public final class S3CopyService {
 				continue;
 			}
 
-			S3Result<Long> result = client.upload(bucket, key, () -> Files.newInputStream(file), size,
-					callback::onProgress, callback::isCancelled);
-			if (result.isCancelled()) {
-				return Outcome.CANCELLED;
-			}
-			if (!result.isOk()) {
-				failures.add(relative + " (" + result.errorOrNull().describe() + ')');
-			}
+			queueUpload(client, null, bucket, rootPrefix + relative, relative, size, group, tasks, failures,
+					() -> Files.newInputStream(file));
 		}
 
 		return Outcome.OK;
 	}
 
-	/** Upload one source resource's content to a key. */
-	private Outcome uploadOne(S3Client client, NuclrResource source, String bucket, String key,
-			NuclrPluginCallback callback, List<String> failures) {
+	/** Queue one upload whose bytes come from a resource. */
+	private void queueUpload(S3Client client, NuclrResource source, String bucket, String key, String name,
+			long size, int group, List<ParallelTransfers.Task> tasks, List<String> failures) {
 
-		S3Client.BodySource body = () -> {
+		queueUpload(client, source, bucket, key, name, size, group, tasks, failures, () -> {
 			try {
 				return source.openInputStream();
 			} catch (IOException e) {
@@ -549,18 +624,49 @@ public final class S3CopyService {
 			} catch (Exception e) {
 				throw new IOException(e);
 			}
-		};
+		});
+	}
 
-		S3Result<Long> result = client.upload(bucket, key, body, sourceSize(source),
-				callback::onProgress, callback::isCancelled);
-		if (result.isCancelled()) {
-			return Outcome.CANCELLED;
-		}
-		if (!result.isOk()) {
-			failures.add(source.getName() + " (" + result.errorOrNull().describe() + ')');
-			return Outcome.FAILED;
-		}
-		return Outcome.OK;
+	/**
+	 * Queue one upload.
+	 *
+	 * <p>The body supplier is opened afresh inside the task, on whichever worker picks it up, and
+	 * again on a retry — which is why it is a supplier and not a stream.
+	 */
+	private void queueUpload(S3Client client, NuclrResource source, String bucket, String key, String name,
+			long size, int group, List<ParallelTransfers.Task> tasks, List<String> failures,
+			S3Client.BodySource body) {
+
+		tasks.add(new ParallelTransfers.Task() {
+
+			@Override
+			public String name() {
+				return name;
+			}
+
+			@Override
+			public int group() {
+				return group;
+			}
+
+			@Override
+			public long size() {
+				return size;
+			}
+
+			@Override
+			public Outcome transfer(S3Client.ProgressListener progress, BooleanSupplier cancelled) {
+				S3Result<Long> result = client.upload(bucket, key, body, size, progress, cancelled);
+				if (result.isCancelled()) {
+					return Outcome.CANCELLED;
+				}
+				if (!result.isOk()) {
+					record(failures, name, result.errorOrNull().describe());
+					return Outcome.FAILED;
+				}
+				return Outcome.OK;
+			}
+		});
 	}
 
 	// -------------------------------------------------------------------------
@@ -602,7 +708,8 @@ public final class S3CopyService {
 		int[] copied = {0};
 
 		ProgressDialog.run(title(), callback -> copied[0] = runServerSideCopy(
-				client, sources, destinationBucket, destinationPrefix, callback, failures, context, sourceUuid));
+				client, sources, destinationBucket, destinationPrefix, options.concurrency(),
+				callback, failures, context, sourceUuid));
 
 		if (copied[0] > 0) {
 			Selections.refreshPanel(context, other.uuid());
@@ -611,88 +718,144 @@ public final class S3CopyService {
 		return copied[0] > 0;
 	}
 
+	/**
+	 * Copy keys within S3 without moving bytes through this machine.
+	 *
+	 * <p>Each key is one short request that spends nearly all its time waiting on the service, so
+	 * this is where running several at once pays best: a prefix of a thousand small objects goes
+	 * from a thousand serial round trips to a fraction of that in wall-clock time.
+	 */
 	private int runServerSideCopy(S3Client client, List<NuclrResource> sources, String destinationBucket,
-			String destinationPrefix, NuclrPluginCallback callback, List<String> failures,
+			String destinationPrefix, int concurrency, NuclrPluginCallback callback, List<String> failures,
 			NuclrPluginContext context, String sourceUuid) {
 
-		int copied = 0;
+		var tasks = new ArrayList<ParallelTransfers.Task>();
+		var groups = new ArrayList<NuclrResource>();
 
-		for (int i = 0; i < sources.size(); i++) {
+		callback.onStart("Preparing " + title().toLowerCase(java.util.Locale.ROOT) + "…");
+
+		for (NuclrResource source : sources) {
 
 			if (callback.isCancelled()) {
-				break;
+				return 0;
 			}
-			NuclrResource source = sources.get(i);
+
 			String sourceBucket = S3Resource.bucketName(source);
-			callback.onStart(title() + "ing " + source.getName() + " (" + (i + 1) + '/' + sources.size() + ')');
-			callback.onProgress(i, sources.size());
+			int group = groups.size();
 
-			boolean ok;
 			if (S3Resource.isObjectDir(source)) {
-				ok = copyPrefixServerSide(client, sourceBucket, S3Resource.objectPrefix(source),
+				Outcome planned = planPrefixServerSideCopy(client, sourceBucket, S3Resource.objectPrefix(source),
 						destinationBucket, destinationPrefix + stripSlash(source.getName()) + '/',
-						callback, failures);
+						group, tasks, failures, callback);
+				if (planned == Outcome.FAILED) {
+					continue;
+				}
 			} else {
-				String key = S3Resource.objectKey(source);
-				S3Result<Void> result = client.copyObject(sourceBucket, key,
-						destinationBucket, destinationPrefix + source.getName());
-				ok = result.isOk();
-				if (!ok) {
-					failures.add(source.getName() + " (" + result.errorOrNull().describe() + ')');
-				}
+				queueServerSideCopy(client, sourceBucket, S3Resource.objectKey(source), destinationBucket,
+						destinationPrefix + source.getName(), source.getName(), group, tasks, failures);
 			}
+			groups.add(source);
+		}
 
-			if (ok) {
-				copied++;
-				// As above: a source that could not be removed keeps its mark.
-				if (!moving || deleteSource(client, source, failures)) {
-					Selections.unmark(context, sourceUuid, source);
-				}
+		ParallelTransfers.Summary summary =
+				ParallelTransfers.run(tasks, concurrency, callback, title() + "ing");
+
+		int copied = 0;
+		for (int group = 0; group < groups.size(); group++) {
+			if (!summary.groupSucceeded(group)) {
+				continue;
+			}
+			copied++;
+			// As above: a source that could not be removed keeps its mark.
+			if (!moving || deleteSource(client, groups.get(group), failures)) {
+				Selections.unmark(context, sourceUuid, groups.get(group));
 			}
 		}
 
-		callback.onProgress(sources.size(), sources.size());
 		log.info("S3 server-side {} finished: {} item(s), {} failed",
 				title().toLowerCase(java.util.Locale.ROOT), copied, failures.size());
 		return copied;
 	}
 
-	/** Copy every object under one prefix to another, key by key. */
-	private boolean copyPrefixServerSide(S3Client client, String sourceBucket, String sourcePrefix,
-			String destinationBucket, String destinationPrefix, NuclrPluginCallback callback,
-			List<String> failures) {
+	/** Queue every object under one prefix for copying to another. */
+	private Outcome planPrefixServerSideCopy(S3Client client, String sourceBucket, String sourcePrefix,
+			String destinationBucket, String destinationPrefix, int group,
+			List<ParallelTransfers.Task> tasks, List<String> failures, NuclrPluginCallback callback) {
 
-		S3Result<List<S3ObjectEntry>> contents = S3Walk.collect(client, sourceBucket, sourcePrefix, callback::isCancelled);
+		S3Result<List<S3ObjectEntry>> contents =
+				S3Walk.collect(client, sourceBucket, sourcePrefix, callback::isCancelled);
 		if (!contents.isOk()) {
 			failures.add(sourcePrefix + " (" + contents.errorOrNull().describe() + ')');
-			return false;
+			return Outcome.FAILED;
 		}
 
-		boolean allCopied = true;
 		for (S3ObjectEntry entry : contents.orNull()) {
-			if (callback.isCancelled()) {
-				return false;
-			}
 			String relative = S3Walk.relativeKey(entry.key(), sourcePrefix);
 			if (relative.isEmpty()) {
 				continue;
 			}
-			callback.onStart(title() + "ing " + relative);
-			S3Result<Void> result = client.copyObject(sourceBucket, entry.key(),
-					destinationBucket, destinationPrefix + relative);
-			if (!result.isOk()) {
-				failures.add(relative + " (" + result.errorOrNull().describe() + ')');
-				allCopied = false;
-			}
+			queueServerSideCopy(client, sourceBucket, entry.key(), destinationBucket,
+					destinationPrefix + relative, relative, group, tasks, failures);
 		}
-		return allCopied;
+
+		return Outcome.OK;
+	}
+
+	/** Queue one key-to-key copy. */
+	private void queueServerSideCopy(S3Client client, String sourceBucket, String sourceKey,
+			String destinationBucket, String destinationKey, String name, int group,
+			List<ParallelTransfers.Task> tasks, List<String> failures) {
+
+		tasks.add(new ParallelTransfers.Task() {
+
+			@Override
+			public String name() {
+				return name;
+			}
+
+			@Override
+			public int group() {
+				return group;
+			}
+
+			@Override
+			public long size() {
+				// The bytes never come through this machine, so there is nothing to weigh a
+				// progress bar with; the run is measured in keys instead.
+				return 0;
+			}
+
+			@Override
+			public Outcome transfer(S3Client.ProgressListener progress, BooleanSupplier cancelled) {
+				if (sourceKey == null) {
+					record(failures, name, "not a copyable object");
+					return Outcome.FAILED;
+				}
+				S3Result<Void> result = client.copyObject(sourceBucket, sourceKey, destinationBucket, destinationKey);
+				if (!result.isOk()) {
+					record(failures, name, result.errorOrNull().describe());
+					return Outcome.FAILED;
+				}
+				return Outcome.OK;
+			}
+		});
 	}
 
 	// -------------------------------------------------------------------------
 	// Shared
 	// -------------------------------------------------------------------------
 
-	private enum Outcome { OK, CANCELLED, FAILED }
+	/**
+	 * Record a failure from a worker thread.
+	 *
+	 * <p>The failure list is built on the planning thread and then appended to by several workers
+	 * at once, so every write to it goes through here.
+	 */
+	private static void record(List<String> failures, String name, String reason) {
+		synchronized (failures) {
+			failures.add(name + " (" + reason + ')');
+		}
+	}
 
 	/** For a move: remove the source once the copy landed. A failure here is reported, not fatal. */
 	private boolean deleteSource(S3Client client, NuclrResource source, List<String> failures) {

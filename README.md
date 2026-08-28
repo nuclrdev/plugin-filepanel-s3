@@ -23,6 +23,7 @@ add — and means every S3-compatible service works through the same code path.
 | 🗂️ Object browser | Prefixes render as folders, with paged loading (a trailing `Load more…` row) for large listings |
 | 📥 Copy out (F5) | Objects and whole folders to a local directory, recreating the tree |
 | 📤 Copy in (F5) | Local files and directories into the open prefix, directory structure becoming key structure |
+| ⚡ Parallel transfers | Several files at once, so many small objects are not one round trip each |
 | ⚡ Server-side copy | Between two S3 panes on one profile the bytes never touch your machine |
 | ✏️ Rename / move (F6) | In-place rename of an object or a whole prefix |
 | 📁 Make folder (F7) | Writes the same zero-byte placeholder the AWS console does |
@@ -134,6 +135,25 @@ None for access-key or environment authentication.
 The **AWS CLI v2** is required only for SSO profiles and for `~/.aws` profiles
 that assume a role or use a `credential_process`. A profile with plain keys
 never shells out.
+
+## ⚡ Parallel transfers
+
+A transfer spends most of its life waiting on a round trip rather than on
+bandwidth, so copying a thousand small objects one at a time is far slower than
+the connection can actually go. Copy and Move run several at once — four by
+default, chosen in the transfer dialog, up to sixteen. Set it to **1** for the
+old strictly-sequential behaviour.
+
+It applies in all three directions: down to a local folder, up into a bucket,
+and key-to-key within one profile, where the gain is largest because each copy
+is a single short request the service performs itself.
+
+Every transfer is planned before any of it runs. Name clashes, overwrites and
+renames are all settled first, on one thread, so you are never asked two
+questions at once and never asked anything once the copying has started. The
+progress bar then reports the total across everything in flight rather than
+whichever file happens to be reporting, and Cancel still stops a large file
+mid-way, not just between files.
 
 ## 🗃️ Where things are stored
 

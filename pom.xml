@@ -10,7 +10,12 @@
 	<name>Nuclr File Panel - S3</name>
 
 	<properties>
-		<platform.sdk.version>4.0.0</platform.sdk.version>
+		<!-- Compiled against 6.1.0 for the plugin actions API (onResult, confirm). Those methods
+		     are only called while running an action, and only a 6.1+ Commander runs
+		     actions, so the manifest keeps asking for 4.0.0: older Commanders still load
+		     the panel. Keep newer SDK API inside actions/. -->
+		<platform.sdk.version>6.1.0</platform.sdk.version>
+		<platform.sdk.min.version>4.0.0</platform.sdk.min.version>
 		<maven.compiler.source>25</maven.compiler.source>
 		<maven.compiler.target>25</maven.compiler.target>
 		<jarsigner.keystorepath>C:/nuclr/key/nuclr-signing.p12</jarsigner.keystorepath>
@@ -44,6 +49,12 @@
 			<artifactId>jackson-databind</artifactId>
 			<version>3.2.1</version>
 			<scope>provided</scope>
+		</dependency>
+		<!-- Unified diffs shown when an action overwrites an object. -->
+		<dependency>
+			<groupId>io.github.java-diff-utils</groupId>
+			<artifactId>java-diff-utils</artifactId>
+			<version>4.15</version>
 		</dependency>
 		<!-- Test dependencies (JUnit 5 / Jupiter). Provided-scope deps above are
 		     also on the test classpath. -->

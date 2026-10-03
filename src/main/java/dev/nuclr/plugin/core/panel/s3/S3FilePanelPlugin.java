@@ -36,6 +36,7 @@ import dev.nuclr.platform.plugin.NuclrPluginCallback;
 import dev.nuclr.platform.plugin.NuclrPluginContext;
 import dev.nuclr.platform.plugin.NuclrResource;
 import dev.nuclr.platform.plugin.QuickViewNuclrPlugin;
+import dev.nuclr.plugin.core.panel.s3.actions.S3Actions;
 import dev.nuclr.plugin.core.panel.s3.api.S3BucketEntry;
 import dev.nuclr.plugin.core.panel.s3.api.S3Client;
 import dev.nuclr.plugin.core.panel.s3.api.S3Endpoint;
@@ -558,6 +559,14 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 	@Override
 	public void act(BaseNuclrPlugin other, String actionType, List<NuclrResource> selectedResources,
 			NuclrResource focusedResource, Map<String, Object> data, NuclrPluginCallback callback) {
+
+		// Actions declared in actions.json (agents, command palette). They need no pane,
+		// selection or open resource, so they run the same on a headless instance; see
+		// S3Actions.
+		if (S3Actions.handles(actionType)) {
+			S3Actions.standard().run(actionType, data, callback);
+			return;
+		}
 
 		switch (actionType) {
 			case ACTION_PROFILE_NEW -> newProfile(data);

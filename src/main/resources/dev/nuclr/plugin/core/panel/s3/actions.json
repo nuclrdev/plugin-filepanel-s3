@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "actions": [
+    {
+      "id": "s3.profiles.list",
+      "title": "List saved S3 profiles",
+      "summary": "Lists the S3 connection profiles saved in the S3 panel: id, name, auth kind, region, custom endpoint and the bucket a profile is tied to. Never returns keys or secrets.",
+      "doc": "actions/s3.profiles.list.md",
+      "class": "read",
+      "exposure": ["agent", "palette"],
+      "input": { "type": "object", "properties": {} },
+      "output": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "description": "Saved profiles, sorted by name",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id":       { "type": "string", "description": "Stable id; always unambiguous as a 'profile' argument" },
+                "name":     { "type": "string", "description": "Display name; also accepted as a 'profile' argument" },
+                "auth":     { "type": "string", "enum": ["access-key", "aws-profile", "sso", "environment"] },
+                "region":   { "type": "string" },
+                "endpoint": { "type": "string", "description": "Custom S3-compatible endpoint (MinIO, R2, ...), or null for AWS" },
+                "bucket":   { "type": "string", "description": "The bucket the profile is tied to, or null; the default 'bucket' argument" },
+                "prefix":   { "type": "string", "description": "The prefix the profile opens at, or null" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "s3.buckets.list",
+      "title": "List buckets",
+      "summary": "Lists the buckets a saved S3 profile can see, with creation date and region.",
+      "doc": "actions/s3.buckets.list.md",
+      "class": "read",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["profile"],
+        "properties": {
+          "profile": { "type": "string", "description": "Saved profile id or name (see s3.profiles.list)" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "buckets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name":    { "type": "string" },
+                "created": { "type": "string", "description": "ISO timestamp, or null" },
+                "region":  { "type": "string", "description": "Bucket region when S3 reports it, or null" }
+              }
+            }
+          },
+          "note": { "type": "string", "description": "Present when the list is only the profile's own bucket" }
+        }
+      }
+    },
+    {
+      "id": "s3.list",
+      "title": "List objects in a bucket",
+      "summary": "Lists one page of objects under a prefix: the immediate children (folders and objects) or, with recursive, every key below it.",
+      "doc": "actions/s3.list.md",
+      "class": "read",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["profile"],
+        "properties": {
+          "profile":           { "type": "string", "description": "Saved profile id or name" },
+          "bucket":            { "type": "string", "description": "Bucket; defaults to the profile's own bucket" },
+          "prefix":            { "type": "string", "description": "Key prefix to list, usually ending in '/'; defaults to the bucket root (or the profile's prefix in its own bucket)" },
+          "recursive":         { "type": "boolean", "default": false, "description": "List every key under the prefix instead of grouping deeper keys into folders" },
+          "limit":             { "type": "integer", "minimum": 1, "maximum": 1000, "default": 1000, "description": "Most entries in this page" },
+          "continuationToken": { "type": "string", "description": "nextContinuationToken from the previous page" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "bucket":  { "type": "string" },
+          "prefix":  { "type": "string" },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key":          { "type": "string", "description": "Full key; folders end in '/'" },
+                "type":         { "type": "string", "enum": ["folder", "object"] },
+                "size":         { "type": "integer", "description": "Bytes; null for folders" },
+                "lastModified": { "type": "string", "description": "ISO timestamp; null for folders" },
+                "storageClass": { "type": "string" }
+              }
+            }
+          },
+          "nextContinuationToken": { "type": "string", "description": "Pass back to get the next page; null on the last page" },
+          "truncated": { "type": "boolean", "description": "Whether more pages follow" }
+        }
+      }
+    },
+    {
+      "id": "s3.head",
+      "title": "Get an object's details",
+      "summary": "Returns an object's size, modification time, storage class and ETag without downloading it.",
+      "doc": "actions/s3.head.md",
+      "class": "read",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["profile", "key"],
+        "properties": {
+          "profile": { "type": "string", "description": "Saved profile id or name" },
+          "bucket":  { "type": "string", "description": "Bucket; defaults to the profile's own bucket" },
+          "key":     { "type": "string", "description": "Full object key" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "bucket":       { "type": "string" },
+          "key":          { "type": "string" },
+          "size":         { "type": "integer" },
+          "lastModified": { "type": "string", "description": "ISO timestamp" },
+          "storageClass": { "type": "string" },
+          "etag":         { "type": "string" }
+        }
+      }
+    },
+    {
+      "id": "s3.read",
+      "title": "Read an object",
+      "summary": "Downloads the start of an object (256 KB by default, up to 4 MB) and returns it as text, or as base64 when it is binary.",
+      "doc": "actions/s3.read.md",
+      "class": "read",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["profile", "key"],
+        "properties": {
+          "profile":  { "type": "string", "description": "Saved profile id or name" },
+          "bucket":   { "type": "string", "description": "Bucket; defaults to the profile's own bucket" },
+          "key":      { "type": "string", "description": "Full object key" },
+          "maxBytes": { "type": "integer", "minimum": 1, "maximum": 4194304, "default": 262144, "description": "Most bytes to return" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "bucket":    { "type": "string" },
+          "key":       { "type": "string" },
+          "size":      { "type": "integer", "description": "The whole object's size in bytes" },
+          "encoding":  { "type": "string", "enum": ["utf-8", "base64"] },
+          "content":   { "type": "string" },
+          "truncated": { "type": "boolean", "description": "Whether the object is longer than what was returned" }
+        }
+      }
+    },
+    {
+      "id": "s3.write",
+      "title": "Write an object",
+      "summary": "Creates or replaces one object with the given content. Replacing an existing object asks the user first, showing a diff for text.",
+      "doc": "actions/s3.write.md",
+      "class": "write",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["profile", "key", "content"],
+        "properties": {
+          "profile":  { "type": "string", "description": "Saved profile id or name" },
+          "bucket":   { "type": "string", "description": "Bucket; defaults to the profile's own bucket" },
+          "key":      { "type": "string", "description": "Full object key" },
+          "content":  { "type": "string", "description": "The object's complete new content" },
+          "encoding": { "type": "string", "enum": ["utf-8", "base64"], "default": "utf-8", "description": "How 'content' is encoded" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "bucket":       { "type": "string" },
+          "key":          { "type": "string" },
+          "bytesWritten": { "type": "integer" },
+          "created":      { "type": "boolean", "description": "Whether the object is new" },
+          "unchanged":    { "type": "boolean", "description": "Whether the object already had exactly this content, so nothing was written" }
+        }
+      }
+    },
+    {
+      "id": "s3.copy",
+      "title": "Copy an object",
+      "summary": "Copies one object within a profile (server-side) or between profiles, accounts and endpoints, without its content passing through the caller.",
+      "doc": "actions/s3.copy.md",
+      "class": "write",
+      "exposure": ["agent", "palette"],
+      "input": {
+        "type": "object",
+        "required": ["fromProfile", "fromKey", "toKey"],
+        "properties": {
+          "fromProfile": { "type": "string", "description": "Profile to copy from" },
+          "fromBucket":  { "type": "string", "description": "Bucket to copy from; defaults to fromProfile's own bucket" },
+          "fromKey":     { "type": "string", "description": "Full key of the object to copy" },
+          "toProfile":   { "type": "string", "description": "Profile to copy to; defaults to fromProfile" },
+          "toBucket":    { "type": "string", "description": "Bucket to copy to; defaults to toProfile's own bucket, else fromBucket" },
+          "toKey":       { "type": "string", "description": "Full key to copy to" },
+          "overwrite":   { "type": "boolean", "default": false, "description": "Replace an existing object at toKey (the user is asked to confirm)" }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "from":       { "type": "string", "description": "s3:// address copied from" },
+          "to":         { "type": "string", "description": "s3:// address copied to" },
+          "bytes":      { "type": "integer" },
+          "serverSide": { "type": "boolean", "description": "Whether S3 copied it without the bytes leaving the endpoint" },
+          "replaced":   { "type": "boolean", "description": "Whether an existing object was replaced" }
+        }
+      }
+    }
+  ]
+}

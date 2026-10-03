@@ -47,7 +47,7 @@
 		<dependency>
 			<groupId>tools.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
-			<version>3.2.1</version>
+			<version>3.2.3</version>
 			<scope>provided</scope>
 		</dependency>
 		<!-- Unified diffs shown when an action overwrites an object. -->

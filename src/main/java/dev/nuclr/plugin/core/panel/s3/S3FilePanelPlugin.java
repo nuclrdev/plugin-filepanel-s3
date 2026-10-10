@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -612,6 +613,15 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 			return;
 		}
 
+		// A secret remembered from the connect prompt is recorded only in the secret store, not in
+		// the profile's flag. Show it as remembered, or pressing OK would read as "forget it".
+		String profileId = existing.getId();
+		if (S3Clients.secrets().has(profileId)) {
+			existing.setRememberSecret(true);
+		}
+		String cachedSecret = SecretCache.secretKey(profileId);
+		String cachedToken = SecretCache.sessionToken(profileId);
+
 		ProfileDialog.Result result =
 				ProfileDialog.show(Dialogs.activeWindow(), "Edit S3 profile", existing, awsFiles);
 		if (result == null) {
@@ -620,7 +630,16 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 
 		// The endpoint, region or credentials may all have changed: drop everything cached about
 		// this profile so the next open uses the new settings rather than the old session.
-		S3Clients.forget(existing.getId());
+		S3Clients.forget(profileId);
+
+		// The secret box always opens empty, so leaving it empty means "keep the secret I have",
+		// as long as it still belongs to the same access key.
+		S3Profile edited = result.profile();
+		if (result.secretAccessKey() == null && cachedSecret != null
+				&& edited.getAuthMode() == S3Profile.AuthMode.ACCESS_KEY
+				&& Objects.equals(existing.getAccessKeyId(), edited.getAccessKeyId())) {
+			result = new ProfileDialog.Result(edited, cachedSecret, cachedToken, result.rememberSecret());
+		}
 
 		if (!saveProfile(result)) {
 			return;

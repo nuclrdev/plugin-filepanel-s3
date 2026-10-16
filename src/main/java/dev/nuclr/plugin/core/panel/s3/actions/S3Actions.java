@@ -573,7 +573,7 @@ public final class S3Actions {
 		String names = profiles.stream().map(S3Profile::displayName).collect(Collectors.joining(", "));
 		if (byName.isEmpty()) {
 			throw new ActionException("No saved S3 profile '" + reference + "'. Saved profiles: "
-					+ (names.isEmpty() ? "none - add one in the S3 panel first." : names + "."));
+					+ (names.isEmpty() ? "none - ask the user to add one in Commander, under Configs → Connections." : names + "."));
 		}
 		throw new ActionException("'" + reference + "' matches " + byName.size()
 				+ " saved profiles; use the id from s3.profiles.list instead.");
@@ -632,7 +632,7 @@ public final class S3Actions {
 		}
 		String hint = switch (error) {
 			case S3Error.NoSuchBucket ignored -> " Use s3.buckets.list to see the buckets this profile can reach.";
-			case S3Error.NotAuthorized ignored -> " Ask the user to check the profile's credentials in the S3 panel.";
+			case S3Error.NotAuthorized ignored -> " Ask the user to check the profile's credentials in Commander, under Configs → Connections.";
 			case S3Error.CredentialsUnavailable ignored -> " Ask the user to open the profile in the S3 panel once.";
 			default -> "";
 		};

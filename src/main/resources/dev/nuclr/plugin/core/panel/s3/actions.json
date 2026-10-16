@@ -4,7 +4,7 @@
     {
       "id": "s3.profiles.list",
       "title": "List saved S3 profiles",
-      "summary": "Lists the S3 connection profiles saved in the S3 panel: id, name, auth kind, region, custom endpoint and the bucket a profile is tied to. Never returns keys or secrets.",
+      "summary": "Lists the S3 connection profiles saved in the S3 panel: id, name, auth kind, region, custom endpoint and the bucket a profile is tied to. Never returns keys or secrets. If none is saved, ask the user to add one in Commander, under Configs → Connections.",
       "doc": "actions/s3.profiles.list.md",
       "class": "read",
       "exposure": ["agent", "palette"],

@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 /**
  * Everything that can go wrong talking to S3, classified into the cases the panel reacts to
  * differently.
@@ -106,13 +108,43 @@ public sealed interface S3Error
 		};
 	}
 
+	/**
+	 * The same description as {@link #describe()}, in the language Commander is set to, for dialogs
+	 * and status lines. {@link #describe()} stays English for agents and logs.
+	 *
+	 * @return the message
+	 */
+	default String display() {
+		return switch (this) {
+			case NotAuthorized error -> tr("error.not.authorized", blankToDefault(error.detail(), tr("error.not.authorized.default")));
+			case AccessDenied error -> tr("error.access.denied", blankToDefault(error.detail(), tr("error.access.denied.default")));
+			case NoSuchBucket error -> tr("error.no.such.bucket", error.bucket());
+			case NoSuchKey error -> tr("error.no.such.key", error.key());
+			case Network error -> tr("error.network", error.detail());
+			case RequestFailed error -> displayRequestFailure(error);
+			case Cancelled ignored -> tr("error.cancelled");
+			case CredentialsUnavailable error -> error.detail();
+		};
+	}
+
+	private static String displayRequestFailure(RequestFailed error) {
+		var text = new StringBuilder(tr("error.request.failed", String.valueOf(error.status())));
+		if (error.code() != null && !error.code().isBlank()) {
+			text.append(": ").append(error.code());
+		}
+		if (error.message() != null && !error.message().isBlank()) {
+			text.append(" - ").append(error.message());
+		}
+		return text.toString();
+	}
+
 	private static String describeRequestFailure(RequestFailed error) {
 		var text = new StringBuilder("The request failed (HTTP ").append(error.status()).append(')');
 		if (error.code() != null && !error.code().isBlank()) {
 			text.append(": ").append(error.code());
 		}
 		if (error.message() != null && !error.message().isBlank()) {
-			text.append(" — ").append(error.message());
+			text.append(" - ").append(error.message());
 		}
 		return text.toString();
 	}

@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.service;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -63,13 +65,13 @@ public final class S3DeleteService {
 
 		List<NuclrResource> targets = Selections.s3Targets(selectedResources, focusedResource);
 		if (targets.isEmpty()) {
-			Dialogs.info("Delete", "Select one or more objects or folders to delete.");
+			Dialogs.info(tr("delete.title"), tr("delete.select"));
 			return 0;
 		}
 
 		S3Client client = S3Clients.byProfileId(S3Resource.profileId(targets.get(0)));
 		if (client == null) {
-			Dialogs.error("Delete", "The connection profile for this panel is no longer available.");
+			Dialogs.error(tr("delete.title"), tr("common.connection.gone"));
 			return 0;
 		}
 
@@ -80,7 +82,7 @@ public final class S3DeleteService {
 			return 0; // the walk failed and has already been reported
 		}
 		if (plan.keys().isEmpty()) {
-			Dialogs.info("Delete", "There is nothing to delete: the selection is empty.");
+			Dialogs.info(tr("delete.title"), tr("delete.nothing"));
 			return 0;
 		}
 		if (!DeleteDialogs.confirmDelete(targets, plan.keys().size())) {
@@ -88,7 +90,7 @@ public final class S3DeleteService {
 		}
 
 		int[] deleted = {0};
-		ProgressDialog.run("Delete", callback -> deleted[0] = run(client, plan, callback));
+		ProgressDialog.run(tr("delete.title"), callback -> deleted[0] = run(client, plan, callback));
 		return deleted[0];
 	}
 
@@ -114,8 +116,8 @@ public final class S3DeleteService {
 			String prefix = S3Resource.objectPrefix(target);
 			S3Result<List<S3ObjectEntry>> contents = S3Walk.collect(client, bucket, prefix, null);
 			if (!contents.isOk()) {
-				Dialogs.error("Delete", "Could not list " + target.getName() + " to delete it:\n"
-						+ contents.errorOrNull().describe());
+				Dialogs.error(tr("delete.title"), tr("delete.list.failed", target.getName(),
+						contents.errorOrNull().display()));
 				return null;
 			}
 			for (S3ObjectEntry entry : contents.orNull()) {
@@ -141,12 +143,13 @@ public final class S3DeleteService {
 				break;
 			}
 			List<String> batch = keys.subList(start, Math.min(start + S3Client.DELETE_BATCH_SIZE, keys.size()));
-			callback.onStart("Deleting " + (start + 1) + "–" + (start + batch.size()) + " of " + keys.size());
+			callback.onStart(tr("delete.progress", String.valueOf(start + 1), String.valueOf(start + batch.size()),
+					String.valueOf(keys.size())));
 			callback.onProgress(start, keys.size());
 
 			S3Result<Void> result = client.deleteObjects(plan.bucket(), batch);
 			if (!result.isOk()) {
-				String label = batch.size() == 1 ? batch.get(0) : batch.size() + " objects";
+				String label = batch.size() == 1 ? batch.get(0) : tr("delete.objects", String.valueOf(batch.size()));
 				if (!DeleteDialogs.error(label, result.errorOrNull())) {
 					log.info("S3 delete aborted by the user after {} object(s)", deleted);
 					return deleted;

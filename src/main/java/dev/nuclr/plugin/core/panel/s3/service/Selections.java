@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.service;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -125,7 +127,7 @@ public final class Selections {
 	 * @return the header text
 	 */
 	public static String header(List<? extends NuclrResource> resources) {
-		return resources.size() == 1 ? resources.get(0).getName() : resources.size() + " items";
+		return resources.size() == 1 ? resources.get(0).getName() : tr("selection.items", String.valueOf(resources.size()));
 	}
 
 	/**

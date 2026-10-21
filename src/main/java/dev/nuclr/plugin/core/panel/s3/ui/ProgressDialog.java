@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.ui;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -65,10 +67,10 @@ public final class ProgressDialog {
 
 		Window owner = Dialogs.activeWindow();
 
-		var itemLabel = new JLabel("Preparing…");
+		var itemLabel = new JLabel(tr("progress.preparing"));
 		var bar = new JProgressBar(0, 100);
 		bar.setStringPainted(true);
-		var cancelButton = new JButton("Cancel");
+		var cancelButton = new JButton(tr("common.cancel"));
 
 		var dialog = new JDialog(owner, title, JDialog.ModalityType.APPLICATION_MODAL);
 		dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
@@ -96,7 +98,7 @@ public final class ProgressDialog {
 		cancelButton.addActionListener(event -> {
 			cancelled.set(true);
 			cancelButton.setEnabled(false);
-			itemLabel.setText("Cancelling…");
+			itemLabel.setText(tr("progress.cancelling"));
 		});
 
 		var callback = new NuclrPluginCallback() {

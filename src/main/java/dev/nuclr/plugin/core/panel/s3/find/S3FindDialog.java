@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.find;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -48,8 +50,6 @@ import dev.nuclr.plugin.core.panel.s3.ui.Dialogs;
  */
 public final class S3FindDialog {
 
-	private static final String TITLE = "Find files";
-
 	private S3FindDialog() {}
 
 	/**
@@ -69,25 +69,25 @@ public final class S3FindDialog {
 	private static S3FindRequest build(String profileId, String bucket, String prefix) {
 
 		Window owner = Dialogs.activeWindow();
-		var dialog = new JDialog(owner, TITLE, JDialog.ModalityType.APPLICATION_MODAL);
+		var dialog = new JDialog(owner, tr("find.title"), JDialog.ModalityType.APPLICATION_MODAL);
 		dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
 		var patternField = new JTextField("*", 30);
 		var patternPanel = new JPanel(new BorderLayout(0, 4));
-		patternPanel.add(new JLabel("File name (wildcards * and ?):"), BorderLayout.NORTH);
+		patternPanel.add(new JLabel(tr("find.dialog.pattern")), BorderLayout.NORTH);
 		patternPanel.add(patternField, BorderLayout.CENTER);
 
 		var locationField = new JTextField("s3://" + bucket + '/' + prefix, 30);
 		locationField.setEditable(false);
 		var locationPanel = new JPanel(new BorderLayout(0, 4));
-		locationPanel.add(new JLabel("Search in:"), BorderLayout.NORTH);
+		locationPanel.add(new JLabel(tr("find.dialog.location")), BorderLayout.NORTH);
 		locationPanel.add(locationField, BorderLayout.CENTER);
 
-		var recursive = new JCheckBox("Search sub-folders", true);
-		var caseSensitive = new JCheckBox("Case sensitive", false);
+		var recursive = new JCheckBox(tr("find.dialog.recursive"), true);
+		var caseSensitive = new JCheckBox(tr("find.dialog.case.sensitive"), false);
 
-		var searchButton = new JButton("Search");
-		var cancelButton = new JButton("Cancel");
+		var searchButton = new JButton(tr("find.dialog.search"));
+		var cancelButton = new JButton(tr("common.cancel"));
 		final S3FindRequest[] chosen = new S3FindRequest[1];
 
 		searchButton.addActionListener(event -> {

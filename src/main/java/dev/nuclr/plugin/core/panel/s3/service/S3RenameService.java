@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.service;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,8 +48,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class S3RenameService {
 
-	private static final String TITLE = "Rename";
-
 	/** Create the service. */
 	public S3RenameService() {
 	}
@@ -62,20 +62,20 @@ public final class S3RenameService {
 
 		if (focusedResource == null || "..".equals(focusedResource.getName())
 				|| !(S3Resource.isObject(focusedResource) || S3Resource.isObjectDir(focusedResource))) {
-			Dialogs.info(TITLE, "Select an object or folder to rename.");
+			Dialogs.info(tr("common.rename"), tr("rename.select"));
 			return false;
 		}
 
 		S3Client client = S3Clients.byProfileId(S3Resource.profileId(focusedResource));
 		if (client == null) {
-			Dialogs.error(TITLE, "The connection profile for this panel is no longer available.");
+			Dialogs.error(tr("common.rename"), tr("common.connection.gone"));
 			return false;
 		}
 
 		boolean isFolder = S3Resource.isObjectDir(focusedResource);
 		String currentName = isFolder ? stripSlash(focusedResource.getName()) : focusedResource.getName();
 
-		String entered = Dialogs.prompt(TITLE, "New name:", currentName);
+		String entered = Dialogs.prompt(tr("common.rename"), tr("rename.prompt"), currentName);
 		if (entered == null) {
 			return false;
 		}
@@ -84,7 +84,7 @@ public final class S3RenameService {
 			return false;
 		}
 		if (S3MakeFolderService.isInvalidName(newName)) {
-			Dialogs.error(TITLE, "A name cannot contain path separators.");
+			Dialogs.error(tr("common.rename"), tr("rename.separators"));
 			return false;
 		}
 
@@ -94,12 +94,12 @@ public final class S3RenameService {
 		if (isFolder) {
 			String sourcePrefix = S3Resource.objectPrefix(focusedResource);
 			String destinationPrefix = S3Resource.parentPrefix(sourcePrefix) + newName + '/';
-			ProgressDialog.run(TITLE, callback ->
+			ProgressDialog.run(tr("common.rename"), callback ->
 					renamed[0] = renameFolder(client, bucket, sourcePrefix, destinationPrefix, callback));
 		} else {
 			String sourceKey = S3Resource.objectKey(focusedResource);
 			String destinationKey = S3Resource.keyPrefix(sourceKey) + newName;
-			ProgressDialog.run(TITLE, callback ->
+			ProgressDialog.run(tr("common.rename"), callback ->
 					renamed[0] = renameObject(client, bucket, sourceKey, destinationKey, callback));
 		}
 
@@ -110,11 +110,11 @@ public final class S3RenameService {
 	private boolean renameObject(S3Client client, String bucket, String sourceKey, String destinationKey,
 			NuclrPluginCallback callback) {
 
-		callback.onStart("Renaming " + S3ObjectEntry.lastSegment(sourceKey));
+		callback.onStart(tr("rename.progress", S3ObjectEntry.lastSegment(sourceKey)));
 
 		S3Result<Void> copied = client.copyObject(bucket, sourceKey, bucket, destinationKey);
 		if (!copied.isOk()) {
-			Dialogs.error(TITLE, "Could not rename the object:\n" + copied.errorOrNull().describe());
+			Dialogs.error(tr("common.rename"), tr("rename.object.failed", copied.errorOrNull().display()));
 			return false;
 		}
 
@@ -122,8 +122,7 @@ public final class S3RenameService {
 		if (!deleted.isOk()) {
 			// The new key exists, so nothing was lost — but both names are now present, and the
 			// user needs to know rather than discover a duplicate later.
-			Dialogs.error(TITLE, "The object was copied to its new name, but the old one could not be removed:\n"
-					+ deleted.errorOrNull().describe());
+			Dialogs.error(tr("common.rename"), tr("rename.object.not.removed", deleted.errorOrNull().display()));
 			return true;
 		}
 
@@ -135,13 +134,13 @@ public final class S3RenameService {
 	private boolean renameFolder(S3Client client, String bucket, String sourcePrefix, String destinationPrefix,
 			NuclrPluginCallback callback) {
 
-		callback.onStart("Listing " + sourcePrefix);
+		callback.onStart(tr("rename.listing", sourcePrefix));
 		S3Result<List<S3ObjectEntry>> contents = S3Walk.collect(client, bucket, sourcePrefix, callback::isCancelled);
 		if (contents.isCancelled()) {
 			return false;
 		}
 		if (!contents.isOk()) {
-			Dialogs.error(TITLE, "Could not list the folder to rename it:\n" + contents.errorOrNull().describe());
+			Dialogs.error(tr("common.rename"), tr("rename.list.failed", contents.errorOrNull().display()));
 			return false;
 		}
 
@@ -153,27 +152,24 @@ public final class S3RenameService {
 			if (callback.isCancelled()) {
 				// The copies made so far stay: removing them could destroy an object that was
 				// already at the destination. The user sees both prefixes and can decide.
-				Dialogs.info(TITLE, "The rename was cancelled part-way. Some objects were copied to\n"
-						+ "s3://" + bucket + '/' + destinationPrefix + "\nbut the original folder is untouched.");
+				Dialogs.info(tr("common.rename"), tr("rename.cancelled", "s3://" + bucket + '/' + destinationPrefix));
 				return true;
 			}
 
 			S3ObjectEntry entry = entries.get(i);
 			String relative = S3Walk.relativeKey(entry.key(), sourcePrefix);
-			callback.onStart("Renaming " + relative);
+			callback.onStart(tr("rename.progress", relative));
 			callback.onProgress(i, entries.size());
 
 			S3Result<Void> copied = client.copyObject(bucket, entry.key(), bucket, destinationPrefix + relative);
 			if (!copied.isOk()) {
-				Dialogs.error(TITLE, "Could not rename the folder — " + relative + " failed:\n"
-						+ copied.errorOrNull().describe()
-						+ "\n\nNothing has been deleted; the original folder is intact.");
+				Dialogs.error(tr("common.rename"), tr("rename.folder.failed", relative, copied.errorOrNull().display()));
 				return false;
 			}
 			copiedKeys.add(entry.key());
 		}
 
-		callback.onStart("Removing the old folder");
+		callback.onStart(tr("rename.removing"));
 		// The prefix's own placeholder goes too, or the emptied folder stays visible.
 		copiedKeys.add(sourcePrefix);
 
@@ -182,8 +178,7 @@ public final class S3RenameService {
 					Math.min(start + S3Client.DELETE_BATCH_SIZE, copiedKeys.size()));
 			S3Result<Void> deleted = client.deleteObjects(bucket, batch);
 			if (!deleted.isOk()) {
-				Dialogs.error(TITLE, "The folder was copied to its new name, but the old one could not be removed:\n"
-						+ deleted.errorOrNull().describe());
+				Dialogs.error(tr("common.rename"), tr("rename.folder.not.removed", deleted.errorOrNull().display()));
 				return true;
 			}
 		}

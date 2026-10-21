@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.ui;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -51,8 +53,6 @@ import dev.nuclr.plugin.core.panel.s3.S3Error;
  */
 public final class DeleteDialogs {
 
-	private static final String TITLE = "Delete";
-
 	private DeleteDialogs() {}
 
 	/**
@@ -66,16 +66,16 @@ public final class DeleteDialogs {
 
 		boolean single = objectCount == 1;
 		var text = new StringBuilder(single
-				? "Do you wish to delete this object?"
-				: "Do you wish to delete these " + objectCount + " objects?");
+				? tr("delete.confirm.one")
+				: tr("delete.confirm.many", String.valueOf(objectCount)));
 		text.append("\n\n");
 		for (NuclrResource target : targets) {
 			text.append(fullPath(target)).append('\n');
 		}
-		text.append("\nDeleted objects cannot be recovered unless the bucket has versioning enabled.");
+		text.append("\n").append(tr("delete.confirm.explain"));
 
 		Component message = buildText(text.toString().stripTrailing(), targets.size() > 1);
-		return choose(TITLE, message, "OK", "Cancel");
+		return choose(tr("delete.title"), message, tr("common.ok"), tr("common.cancel"));
 	}
 
 	/**
@@ -86,9 +86,9 @@ public final class DeleteDialogs {
 	 * @return {@code true} to skip it and continue, {@code false} to abort the whole operation
 	 */
 	public static boolean error(String name, S3Error error) {
-		String detail = error == null ? "The object could not be deleted." : error.describe();
-		Component message = buildText("Failed to delete:\n" + name + "\n\n" + detail, false);
-		return choose(TITLE, message, "Skip", "Abort");
+		String detail = error == null ? tr("delete.error.unknown") : error.display();
+		Component message = buildText(tr("delete.error.message", name, detail), false);
+		return choose(tr("delete.title"), message, tr("common.skip"), tr("delete.error.abort"));
 	}
 
 	private static String fullPath(NuclrResource resource) {

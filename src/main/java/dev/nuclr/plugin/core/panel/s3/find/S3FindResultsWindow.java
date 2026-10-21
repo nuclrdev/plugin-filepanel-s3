@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.find;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -69,13 +71,13 @@ public final class S3FindResultsWindow extends JDialog implements S3FindService.
 
 	private final JList<NuclrResource> list = new JList<>(model);
 
-	private final JLabel status = new JLabel("Searching…");
+	private final JLabel status = new JLabel(tr("find.status.searching"));
 
-	private final JButton stopButton = new JButton("Stop");
+	private final JButton stopButton = new JButton(tr("find.button.stop"));
 
-	private final JButton panelButton = new JButton("Panel");
+	private final JButton panelButton = new JButton(tr("find.button.panel"));
 
-	private final JButton closeButton = new JButton("Close");
+	private final JButton closeButton = new JButton(tr("find.button.close"));
 
 	private final transient Consumer<NuclrResource> onActivate;
 
@@ -96,7 +98,7 @@ public final class S3FindResultsWindow extends JDialog implements S3FindService.
 	public S3FindResultsWindow(Window owner, S3FindRequest request, Consumer<NuclrResource> onActivate,
 			Consumer<List<NuclrResource>> onSendToPanel) {
 
-		super(owner, "Find results — " + request.namePattern(), ModalityType.MODELESS);
+		super(owner, tr("find.results.title", request.namePattern()), ModalityType.MODELESS);
 		this.onActivate = onActivate;
 		this.onSendToPanel = onSendToPanel;
 
@@ -118,7 +120,7 @@ public final class S3FindResultsWindow extends JDialog implements S3FindService.
 		list.getActionMap().put("find.activate", Dialogs.action(this::activateSelection));
 
 		stopButton.addActionListener(event -> stopSearch());
-		panelButton.setToolTipText("Open these results in a temporary panel");
+		panelButton.setToolTipText(tr("find.button.panel.tooltip"));
 		panelButton.setEnabled(false);
 		panelButton.addActionListener(event -> sendResultsToPanel());
 		closeButton.addActionListener(event -> dispose());
@@ -182,20 +184,17 @@ public final class S3FindResultsWindow extends JDialog implements S3FindService.
 		stopButton.setEnabled(false);
 
 		if (error != null) {
-			status.setText("Search failed after " + scanned + " scanned — " + error.describe());
+			status.setText(tr("find.status.failed", String.valueOf(scanned), error.display()));
 			return;
 		}
-		status.setText("Search " + (cancelled ? "stopped" : "complete") + " — "
-				+ model.getSize() + " match(es), " + scanned + " scanned");
+		status.setText(tr(cancelled ? "find.status.stopped" : "find.status.complete",
+				String.valueOf(model.getSize()), String.valueOf(scanned)));
 	}
 
 	private void refreshStatus(long scanned) {
-		var text = new StringBuilder().append(model.getSize()).append(" match(es)");
-		if (scanned >= 0) {
-			text.append(" — ").append(scanned).append(" scanned");
-		}
-		text.append(" — searching…");
-		status.setText(text.toString());
+		status.setText(scanned >= 0
+				? tr("find.status.found.scanned.searching", String.valueOf(model.getSize()), String.valueOf(scanned))
+				: tr("find.status.found.searching", String.valueOf(model.getSize())));
 	}
 
 	private void stopSearch() {

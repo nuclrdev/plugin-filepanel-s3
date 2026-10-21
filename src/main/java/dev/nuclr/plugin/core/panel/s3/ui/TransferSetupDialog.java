@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.ui;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -110,14 +112,14 @@ public final class TransferSetupDialog {
 		var dialog = newDialog(owner, title);
 
 		var destinationField = new JTextField(defaultTarget != null ? defaultTarget.toString() : "", 40);
-		var destinationPanel = labelled(title + ' ' + header + " to:", destinationField);
+		var destinationPanel = labelled(tr("transfer.setup.prompt", title, header), destinationField);
 		var existing = existingCombo();
 		var existingRow = existingRow(existing);
 		var concurrency = concurrencyCombo();
-		var concurrencyRow = concurrencyRow(concurrency, "Fetch at once:");
+		var concurrencyRow = concurrencyRow(concurrency, tr("transfer.setup.fetch.at.once"));
 
 		var confirmButton = new JButton(title);
-		var cancelButton = new JButton("Cancel");
+		var cancelButton = new JButton(tr("common.cancel"));
 		final Download[] chosen = new Download[1];
 
 		confirmButton.addActionListener(event -> {
@@ -145,14 +147,14 @@ public final class TransferSetupDialog {
 
 		var destinationField = new JTextField(destinationLabel, 40);
 		destinationField.setEditable(false);
-		var destinationPanel = labelled(title + ' ' + header + " to:", destinationField);
+		var destinationPanel = labelled(tr("transfer.setup.prompt", title, header), destinationField);
 		var existing = existingCombo();
 		var existingRow = existingRow(existing);
 		var concurrency = concurrencyCombo();
-		var concurrencyRow = concurrencyRow(concurrency, "Send at once:");
+		var concurrencyRow = concurrencyRow(concurrency, tr("transfer.setup.send.at.once"));
 
 		var confirmButton = new JButton(title);
-		var cancelButton = new JButton("Cancel");
+		var cancelButton = new JButton(tr("common.cancel"));
 		final Upload[] chosen = new Upload[1];
 
 		confirmButton.addActionListener(event -> {
@@ -179,12 +181,13 @@ public final class TransferSetupDialog {
 	}
 
 	private static JComboBox<String> existingCombo() {
-		return new JComboBox<>(new String[] {"Ask", "Overwrite", "Skip", "Rename", "Append"});
+		return new JComboBox<>(new String[] {tr("transfer.existing.ask"), tr("transfer.existing.overwrite"),
+				tr("transfer.existing.skip"), tr("transfer.existing.rename"), tr("transfer.existing.append")});
 	}
 
 	private static JPanel existingRow(JComboBox<String> existing) {
 		var row = new JPanel(new BorderLayout(8, 0));
-		row.add(new JLabel("Already existing files:"), BorderLayout.WEST);
+		row.add(new JLabel(tr("transfer.existing.label")), BorderLayout.WEST);
 		row.add(existing, BorderLayout.CENTER);
 		return row;
 	}

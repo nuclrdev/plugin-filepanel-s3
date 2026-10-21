@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.service;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
@@ -218,7 +220,8 @@ final class ParallelTransfers {
 			}
 
 			int done = completed.incrementAndGet();
-			callback.onStart(label + ' ' + done + '/' + taskCount + " — " + task.name());
+			callback.onStart(tr("transfer.progress.item", label, String.valueOf(done), String.valueOf(taskCount),
+					task.name()));
 			publish(transferred.get(), totalBytes, lastPublish, callback, true);
 		}
 	}

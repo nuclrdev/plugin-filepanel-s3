@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -136,6 +138,9 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 
 	@Override
 	public void preinit(NuclrPluginContext context) {
+		if (context != null) {
+			Messages.use(context.getLocale());
+		}
 		this.context = context;
 		this.currentResource = S3Resource.root();
 		log.info("S3 file panel plugin loaded");
@@ -295,7 +300,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 
 		S3Profile profile = S3Clients.store().byId(profileId);
 		if (profile == null) {
-			Dialogs.error("S3", "That connection profile is no longer saved. It may have been removed.");
+			Dialogs.error("S3", tr("panel.profile.gone"));
 			this.currentResource = S3Resource.root();
 			return listProfiles(cancelled, sink);
 		}
@@ -351,7 +356,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 
 		S3Client client = S3Clients.byProfileId(profileId);
 		if (client == null) {
-			Dialogs.error("S3", "That connection profile is no longer saved. It may have been removed.");
+			Dialogs.error("S3", tr("panel.profile.gone"));
 			return data;
 		}
 
@@ -436,7 +441,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 		if (profile != null && profile.getAuthMode() == S3Profile.AuthMode.SSO
 				&& error instanceof S3Error.CredentialsUnavailable) {
 			boolean signIn = Dialogs.confirm("S3",
-					error.describe() + "\n\nSign in to " + profile.displayName() + " now?");
+					tr("panel.sso.sign.in.now", error.display(), profile.displayName()));
 			if (signIn) {
 				ssoLogin(profile);
 			}
@@ -444,10 +449,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 		}
 
 		if (error instanceof S3Error.AccessDenied && profile != null && !profile.isBucketScoped()) {
-			Dialogs.error("S3", "These credentials cannot list the account's buckets.\n\n"
-					+ error.describe()
-					+ "\n\nIf they are scoped to one bucket, edit the profile and name that bucket "
-					+ "so the panel opens it directly.");
+			Dialogs.error("S3", tr("panel.list.buckets.denied", error.display()));
 			return;
 		}
 
@@ -464,33 +466,33 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 		var items = new ArrayList<NuclrMenuResource>();
 
 		if (S3Resource.isRoot(currentResource)) {
-			items.add(menu("Edit profile", "F4", ACTION_PROFILE_EDIT));
-			items.add(menu("New profile", "F7", ACTION_PROFILE_NEW));
-			items.add(menu("Remove profile", "F8", ACTION_PROFILE_REMOVE));
-			items.add(menu("Name", "Ctrl+F3", "filepanel.sort:name:Name"));
+			items.add(menu(tr("menu.profile.edit"), "F4", ACTION_PROFILE_EDIT));
+			items.add(menu(tr("menu.profile.new"), "F7", ACTION_PROFILE_NEW));
+			items.add(menu(tr("menu.profile.remove"), "F8", ACTION_PROFILE_REMOVE));
+			items.add(menu(tr("menu.sort.name"), "Ctrl+F3", "filepanel.sort:name:Name"));
 			return items;
 		}
 
 		if (S3Resource.isProfile(currentResource)) {
-			items.add(menu("Name", "Ctrl+F3", "filepanel.sort:name:Name"));
-			items.add(menu("Sort", "Ctrl+F12", "filepanel.sort:dialog"));
+			items.add(menu(tr("menu.sort.name"), "Ctrl+F3", "filepanel.sort:name:Name"));
+			items.add(menu(tr("menu.sort"), "Ctrl+F12", "filepanel.sort:dialog"));
 			return items;
 		}
 
 		if (S3Resource.isSearchResults(currentResource)) {
-			items.add(menu("View", "F3", ACTION_VIEW));
-			items.add(menu("Copy", "F5", ACTION_COPY));
-			items.add(menu("Name", "Ctrl+F3", "filepanel.sort:name:Name"));
+			items.add(menu(tr("menu.view"), "F3", ACTION_VIEW));
+			items.add(menu(tr("menu.copy"), "F5", ACTION_COPY));
+			items.add(menu(tr("menu.sort.name"), "Ctrl+F3", "filepanel.sort:name:Name"));
 			return items;
 		}
 
 		if (S3Resource.isInsideBucket(currentResource)) {
-			items.add(menu("View", "F3", ACTION_VIEW));
-			items.add(menu("Copy", "F5", ACTION_COPY));
-			items.add(menu(resource != null && resource.isFolder() ? "Move" : "Rename/Move", "F6", ACTION_MOVE));
-			items.add(menu("Make Folder", "F7", ACTION_MAKE_FOLDER));
-			items.add(menu("Delete", "F8", ACTION_DELETE));
-			items.add(menu("Find", "Alt+F7", ACTION_FIND));
+			items.add(menu(tr("menu.view"), "F3", ACTION_VIEW));
+			items.add(menu(tr("menu.copy"), "F5", ACTION_COPY));
+			items.add(menu(resource != null && resource.isFolder() ? tr("menu.move") : tr("menu.rename.move"), "F6", ACTION_MOVE));
+			items.add(menu(tr("menu.make.folder"), "F7", ACTION_MAKE_FOLDER));
+			items.add(menu(tr("menu.delete"), "F8", ACTION_DELETE));
+			items.add(menu(tr("menu.find"), "Alt+F7", ACTION_FIND));
 			addSortMenuItems(items);
 			return items;
 		}
@@ -504,12 +506,12 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 	 * last read, so those slots would sort by a stub.
 	 */
 	private static void addSortMenuItems(List<NuclrMenuResource> items) {
-		items.add(sortByColumn("Name", "Ctrl+F3", "name"));
-		items.add(sortByColumn("Extension", "Ctrl+F4", "ext"));
-		items.add(sortByColumn("Modified", "Ctrl+F5", "modified"));
-		items.add(sortByColumn("Size", "Ctrl+F6", "size"));
-		items.add(menu("Unsort", "Ctrl+F7", "filepanel.sort:unsorted"));
-		items.add(menu("Sort", "Ctrl+F12", "filepanel.sort:dialog"));
+		items.add(sortByColumn("Name", tr("menu.sort.name"), "Ctrl+F3", "name"));
+		items.add(sortByColumn("Extension", tr("menu.sort.extension"), "Ctrl+F4", "ext"));
+		items.add(sortByColumn("Modified", tr("menu.sort.modified"), "Ctrl+F5", "modified"));
+		items.add(sortByColumn("Size", tr("menu.sort.size"), "Ctrl+F6", "size"));
+		items.add(menu(tr("menu.unsort"), "Ctrl+F7", "filepanel.sort:unsorted"));
+		items.add(menu(tr("menu.sort"), "Ctrl+F12", "filepanel.sort:dialog"));
 	}
 
 	@Override
@@ -518,17 +520,17 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 
 		if (S3Resource.isRoot(currentResource)) {
 			var items = new ArrayList<NuclrContextMenuItem>();
-			items.add(NuclrContextMenuItem.builder().label("New profile")
+			items.add(NuclrContextMenuItem.builder().label(tr("context.profile.new"))
 					.actionType(ACTION_PROFILE_NEW).iconKey("server-add").build());
-			items.add(NuclrContextMenuItem.builder().label("Edit profile")
+			items.add(NuclrContextMenuItem.builder().label(tr("context.profile.edit"))
 					.actionType(ACTION_PROFILE_EDIT).iconKey("edit").build());
 			S3Profile profile = profileOf(focusedResource);
 			if (profile != null && profile.getAuthMode() == S3Profile.AuthMode.SSO) {
-				items.add(NuclrContextMenuItem.builder().label("Sign in (SSO)")
+				items.add(NuclrContextMenuItem.builder().label(tr("context.sso.sign.in"))
 						.actionType(ACTION_SSO_LOGIN).iconKey("key").build());
 			}
 			items.add(NuclrContextMenuItem.separator());
-			items.add(NuclrContextMenuItem.builder().label("Remove profile")
+			items.add(NuclrContextMenuItem.builder().label(tr("context.profile.remove"))
 					.actionType(ACTION_PROFILE_REMOVE).iconKey("delete").destructive(true).build());
 			return items;
 		}
@@ -539,16 +541,16 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 
 		var items = new ArrayList<NuclrContextMenuItem>();
 		if (focusedResource != null && !"..".equals(focusedResource.getName())) {
-			items.add(NuclrContextMenuItem.builder().label("Copy S3 URL")
+			items.add(NuclrContextMenuItem.builder().label(tr("context.copy.url"))
 					.actionType(ACTION_COPY_URL).iconKey("copy").build());
 			items.add(NuclrContextMenuItem.separator());
 		}
-		items.add(NuclrContextMenuItem.builder().label("Make Folder")
+		items.add(NuclrContextMenuItem.builder().label(tr("context.make.folder"))
 				.actionType(ACTION_MAKE_FOLDER).iconKey("folder-add").build());
-		items.add(NuclrContextMenuItem.builder().label("Find")
+		items.add(NuclrContextMenuItem.builder().label(tr("context.find"))
 				.actionType(ACTION_FIND).iconKey("search").build());
 		items.add(NuclrContextMenuItem.separator());
-		items.add(NuclrContextMenuItem.builder().label("Delete")
+		items.add(NuclrContextMenuItem.builder().label(tr("context.delete"))
 				.actionType(ACTION_DELETE).iconKey("delete").destructive(true).build());
 		return items;
 	}
@@ -595,7 +597,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 	private void newProfile(Map<String, Object> data) {
 
 		ProfileDialog.Result result =
-				ProfileDialog.show(Dialogs.activeWindow(), "New S3 profile", new S3Profile(), awsFiles);
+				ProfileDialog.show(Dialogs.activeWindow(), tr("profile.new.title"), new S3Profile(), awsFiles);
 		if (result == null) {
 			return;
 		}
@@ -609,7 +611,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 
 		S3Profile existing = profileOf(focusedResource);
 		if (existing == null) {
-			Dialogs.error("Edit profile", "Select a profile to edit.");
+			Dialogs.error(tr("context.profile.edit"), tr("profile.edit.select"));
 			return;
 		}
 
@@ -623,7 +625,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 		String cachedToken = SecretCache.sessionToken(profileId);
 
 		ProfileDialog.Result result =
-				ProfileDialog.show(Dialogs.activeWindow(), "Edit S3 profile", existing, awsFiles);
+				ProfileDialog.show(Dialogs.activeWindow(), tr("profile.edit.title"), existing, awsFiles);
 		if (result == null) {
 			return;
 		}
@@ -652,7 +654,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 			S3Clients.store().upsert(result.profile());
 		} catch (IOException e) {
 			log.warn("Could not save the S3 profile {}: {}", result.profile().displayName(), e.getMessage());
-			Dialogs.error("S3 profile", "Could not save the profile:\n" + e.getMessage());
+			Dialogs.error(tr("profile.error.title"), tr("profile.error.save", e.getMessage()));
 			return false;
 		}
 		// A secret typed in the dialog never goes into the profile file. It is cached for this
@@ -670,7 +672,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 			}
 		} catch (IOException e) {
 			log.warn("Could not update the saved secret for {}: {}", result.profile().displayName(), e.getMessage());
-			Dialogs.error("S3 profile", "The profile was saved, but the secret could not be:\n" + e.getMessage());
+			Dialogs.error(tr("profile.error.title"), tr("profile.error.secret", e.getMessage()));
 		}
 		return true;
 	}
@@ -679,19 +681,17 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 
 		S3Profile profile = profileOf(focusedResource);
 		if (profile == null) {
-			Dialogs.error("Remove profile", "Select a profile to remove.");
+			Dialogs.error(tr("context.profile.remove"), tr("profile.remove.select"));
 			return;
 		}
-		if (!Dialogs.confirm("Remove profile",
-				"Remove the connection profile " + profile.displayName() + "?\n\n"
-						+ "This only removes the saved connection. Nothing in the bucket is touched.")) {
+		if (!Dialogs.confirm(tr("context.profile.remove"), tr("profile.remove.confirm", profile.displayName()))) {
 			return;
 		}
 
 		try {
 			S3Clients.store().remove(profile.getId());
 		} catch (IOException e) {
-			Dialogs.error("Remove profile", "Could not remove the profile:\n" + e.getMessage());
+			Dialogs.error(tr("context.profile.remove"), tr("profile.remove.failed", e.getMessage()));
 			return;
 		}
 		S3Clients.forget(profile.getId());
@@ -711,12 +711,12 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 	private void ssoLogin(S3Profile profile) {
 
 		if (profile == null) {
-			Dialogs.error("Sign in", "Select an SSO profile to sign in.");
+			Dialogs.error(tr("sso.title"), tr("sso.select"));
 			return;
 		}
 		if (profile.getAuthMode() != S3Profile.AuthMode.SSO
 				&& profile.getAuthMode() != S3Profile.AuthMode.AWS_PROFILE) {
-			Dialogs.info("Sign in", profile.displayName() + " does not use SSO, so there is nothing to sign in to.");
+			Dialogs.info(tr("sso.title"), tr("sso.not.sso", profile.displayName()));
 			return;
 		}
 
@@ -725,11 +725,10 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 				log.info("Starting an SSO sign-in for {}", profile.displayName());
 				AwsCli.ssoLogin(profile.getAwsProfileName());
 				S3Clients.resolver().invalidate(profile);
-				Dialogs.info("Sign in", "Signed in to " + profile.displayName()
-						+ ".\n\nOpen the profile again to browse it.");
+				Dialogs.info(tr("sso.title"), tr("sso.signed.in", profile.displayName()));
 			} catch (IOException e) {
 				log.warn("SSO sign-in failed for {}: {}", profile.displayName(), e.getMessage());
-				Dialogs.error("Sign in", "Could not sign in:\n" + e.getMessage());
+				Dialogs.error(tr("sso.title"), tr("sso.failed", e.getMessage()));
 			}
 		});
 	}
@@ -746,7 +745,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 			log.info("Copied {} to the clipboard", resource.getFullPath());
 		} catch (RuntimeException e) {
 			log.warn("Could not copy to the clipboard: {}", e.getMessage());
-			Dialogs.error("Copy S3 URL", "Could not copy to the clipboard: " + e.getMessage());
+			Dialogs.error(tr("context.copy.url"), tr("copy.url.failed", e.getMessage()));
 		}
 	}
 
@@ -828,7 +827,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 	private void makeFolder(Map<String, Object> data) {
 
 		if (!S3Resource.isInsideBucket(currentResource)) {
-			Dialogs.info("Make Folder", "Open a bucket to create a folder in it.");
+			Dialogs.info(tr("folder.make.title"), tr("folder.open.bucket"));
 			return;
 		}
 
@@ -837,7 +836,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 		String prefix = S3Resource.objectPrefix(currentResource);
 		S3Client client = S3Clients.byProfileId(profileId);
 		if (client == null) {
-			Dialogs.error("Make Folder", "The connection profile for this panel is no longer available.");
+			Dialogs.error(tr("folder.make.title"), tr("common.connection.gone"));
 			return;
 		}
 
@@ -853,7 +852,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 	private void openFindDialog() {
 
 		if (!S3Resource.isInsideBucket(currentResource)) {
-			Dialogs.info("Find files", "Open a bucket to search it.");
+			Dialogs.info(tr("find.title"), tr("find.open.bucket"));
 			return;
 		}
 
@@ -913,7 +912,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 			boolean recursive) throws IOException {
 
 		if (!S3Resource.isInsideBucket(resource)) {
-			throw new IOException("Only a bucket or folder can be walked.");
+			throw new IOException(tr("walk.not.folder"));
 		}
 
 		String profileId = S3Resource.profileId(resource);
@@ -921,13 +920,13 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 		String prefix = S3Resource.objectPrefix(resource);
 		S3Client client = S3Clients.byProfileId(profileId);
 		if (client == null) {
-			throw new IOException("The connection profile for this panel is no longer available.");
+			throw new IOException(tr("common.connection.gone"));
 		}
 
 		if (!recursive) {
 			S3Result<S3Xml.ListPage> page = client.listObjects(bucket, prefix, null);
 			if (!page.isOk()) {
-				throw new IOException(page.errorOrNull().describe());
+				throw new IOException(page.errorOrNull().display());
 			}
 			for (S3ObjectEntry entry : page.orNull().entries()) {
 				visitor.accept(entry.folder()
@@ -941,7 +940,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 				entry -> visitor.accept(S3Resource.object(profileId, bucket, entry)),
 				() -> cancelled != null && cancelled.get());
 		if (!outcome.isOk() && !outcome.isCancelled()) {
-			throw new IOException(outcome.errorOrNull().describe());
+			throw new IOException(outcome.errorOrNull().display());
 		}
 	}
 
@@ -961,9 +960,9 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 		}
 		if (S3Resource.isProfile(currentResource)) {
 			S3Profile profile = S3Clients.store().byId(S3Resource.profileId(currentResource));
-			return "S3: " + (profile == null ? "Buckets" : profile.displayName());
+			return "S3: " + (profile == null ? tr("location.buckets") : profile.displayName());
 		}
-		return "S3: Connections";
+		return "S3: " + tr("location.connections");
 	}
 
 	@Override
@@ -988,7 +987,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 		for (NuclrResource resource : selectedResources) {
 			bytes += Math.max(resource.getLength(), 0);
 		}
-		return selectedResources.size() + " items selected, " + S3Resource.formatSize(bytes);
+		return tr("selection.summary", String.valueOf(selectedResources.size()), S3Resource.formatSize(bytes));
 	}
 
 	// =========================================================================
@@ -1076,7 +1075,8 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 		return new NuclrMenuResource(name, functionKey, eventType);
 	}
 
-	private static NuclrMenuResource sortByColumn(String columnName, String functionKey, String criterion) {
-		return menu(columnName, functionKey, "filepanel.sort:" + criterion + ':' + columnName);
+	private static NuclrMenuResource sortByColumn(String columnName, String label, String functionKey,
+			String criterion) {
+		return menu(label, functionKey, "filepanel.sort:" + criterion + ':' + columnName);
 	}
 }

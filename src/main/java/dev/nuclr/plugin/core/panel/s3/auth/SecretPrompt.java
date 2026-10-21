@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.auth;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.GridBagConstraints;
@@ -75,8 +77,8 @@ public final class SecretPrompt {
 
 		var secretField = new JPasswordField(32);
 		var tokenField = new JPasswordField(32);
-		var temporary = new JCheckBox("These are temporary credentials (session token)");
-		var remember = new JCheckBox("Save this key on this machine and stop asking",
+		var temporary = new JCheckBox(tr("secret.temporary"));
+		var remember = new JCheckBox(tr("secret.remember"),
 				profile.isRememberSecret());
 
 		tokenField.setEnabled(false);
@@ -93,11 +95,11 @@ public final class SecretPrompt {
 		constraints.anchor = GridBagConstraints.WEST;
 
 		int row = 0;
-		row = addRow(form, constraints, row, "Access key id:", new JLabel(
+		row = addRow(form, constraints, row, tr("profile.label.access.key.id"), new JLabel(
 				profile.getAccessKeyId() == null || profile.getAccessKeyId().isBlank()
-						? "(not set)"
+						? tr("secret.not.set")
 						: profile.getAccessKeyId()));
-		row = addRow(form, constraints, row, "Secret access key:", secretField);
+		row = addRow(form, constraints, row, tr("profile.label.secret.key"), secretField);
 
 		constraints.gridx = 0;
 		constraints.gridy = row++;
@@ -105,7 +107,7 @@ public final class SecretPrompt {
 		form.add(temporary, constraints);
 		constraints.gridwidth = 1;
 
-		row = addRow(form, constraints, row, "Session token:", tokenField);
+		row = addRow(form, constraints, row, tr("secret.label.session.token"), tokenField);
 
 		constraints.gridx = 0;
 		constraints.gridy = row;
@@ -115,10 +117,8 @@ public final class SecretPrompt {
 
 		var message = new JPanel(new BorderLayout(0, 10));
 		message.add(new JLabel(retry
-				? "<html>Those credentials were rejected. Enter the secret access key for <b>"
-						+ escape(profile.displayName()) + "</b>:</html>"
-				: "<html>Enter the secret access key for <b>" + escape(profile.displayName())
-						+ "</b>:</html>"), BorderLayout.NORTH);
+				? tr("secret.prompt.retry", escape(profile.displayName()))
+				: tr("secret.prompt", escape(profile.displayName()))), BorderLayout.NORTH);
 		message.add(form, BorderLayout.CENTER);
 		var note = new JLabel();
 		remember.addActionListener(event -> note.setText(rememberNote(remember.isSelected())));
@@ -138,7 +138,7 @@ public final class SecretPrompt {
 			}
 		};
 
-		JDialog dialog = optionPane.createDialog(null, "S3 Credentials");
+		JDialog dialog = optionPane.createDialog(null, tr("secret.title"));
 		dialog.setVisible(true);
 		dialog.dispose();
 
@@ -163,9 +163,8 @@ public final class SecretPrompt {
 	 */
 	private static String rememberNote(boolean remember) {
 		return remember
-				? "<html><small>Saved encrypted under your home directory, readable by programs "
-						+ "running as you.<br>Untick to keep it in memory for this session only.</small></html>"
-				: "<html><small>Held in memory for this session only; never written to disk.</small></html>";
+				? tr("secret.note.saved")
+				: tr("secret.note.memory");
 	}
 
 	private static int addRow(JPanel form, GridBagConstraints constraints, int row, String label, Component field) {

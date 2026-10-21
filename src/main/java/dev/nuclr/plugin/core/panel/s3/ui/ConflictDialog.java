@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.ui;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -126,10 +128,10 @@ public final class ConflictDialog {
 	private Resolution ask(String targetLabel, String newDetail, String existingDetail, String defaultRenameName) {
 
 		Window owner = Dialogs.activeWindow();
-		var dialog = new JDialog(owner, "Warning", JDialog.ModalityType.APPLICATION_MODAL);
+		var dialog = new JDialog(owner, tr("conflict.title"), JDialog.ModalityType.APPLICATION_MODAL);
 		dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
-		var title = new JLabel("File already exists", JLabel.CENTER);
+		var title = new JLabel(tr("conflict.heading"), JLabel.CENTER);
 		title.setFont(title.getFont().deriveFont(Font.BOLD));
 
 		var header = new JPanel(new BorderLayout(0, 4));
@@ -138,17 +140,17 @@ public final class ConflictDialog {
 
 		var info = new JPanel(new GridLayout(2, 1, 0, 2));
 		info.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 0));
-		info.add(detailRow("New", newDetail));
-		info.add(detailRow("Existing", existingDetail));
+		info.add(detailRow(tr("conflict.new"), newDetail));
+		info.add(detailRow(tr("conflict.existing"), existingDetail));
 
-		var remember = new JCheckBox("Remember choice");
+		var remember = new JCheckBox(tr("conflict.remember"));
 		final Resolution[] picked = new Resolution[1];
 
-		var overwrite = new JButton("Overwrite");
-		var skip = new JButton("Skip");
-		var rename = new JButton("Rename");
-		var append = new JButton("Append");
-		var cancel = new JButton("Cancel");
+		var overwrite = new JButton(tr("conflict.overwrite"));
+		var skip = new JButton(tr("common.skip"));
+		var rename = new JButton(tr("common.rename"));
+		var append = new JButton(tr("conflict.append"));
+		var cancel = new JButton(tr("common.cancel"));
 
 		overwrite.addActionListener(event -> {
 			picked[0] = Resolution.of(Action.OVERWRITE);
@@ -225,19 +227,19 @@ public final class ConflictDialog {
 	/** Ask for a replacement name; {@code null} means the rename was abandoned. */
 	private String promptRename(Window owner, String defaultName) {
 
-		var dialog = new JDialog(owner, "Rename", JDialog.ModalityType.APPLICATION_MODAL);
+		var dialog = new JDialog(owner, tr("conflict.rename.title"), JDialog.ModalityType.APPLICATION_MODAL);
 		dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
 		var field = new JTextField(defaultName == null ? "" : defaultName, 40);
 
 		var top = new JPanel(new BorderLayout(0, 4));
-		top.add(new JLabel("New name:"), BorderLayout.NORTH);
+		top.add(new JLabel(tr("rename.prompt")), BorderLayout.NORTH);
 		top.add(field, BorderLayout.CENTER);
 
 		final String[] result = new String[1];
 
-		var ok = new JButton("OK");
-		var cancel = new JButton("Cancel");
+		var ok = new JButton(tr("common.ok"));
+		var cancel = new JButton(tr("common.cancel"));
 		ok.addActionListener(event -> {
 			String text = field.getText() == null ? "" : field.getText().trim();
 			if (text.isEmpty()) {

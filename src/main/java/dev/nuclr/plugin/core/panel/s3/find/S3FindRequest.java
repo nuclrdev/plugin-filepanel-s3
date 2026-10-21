@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.find;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.util.regex.Pattern;
 
 /**
@@ -48,7 +50,7 @@ public record S3FindRequest(
 	 */
 	public String title() {
 		String pattern = namePattern == null || namePattern.isBlank() ? "*" : namePattern;
-		return "Find: " + pattern + " in s3://" + bucket + '/' + prefix;
+		return tr("find.request.title", pattern, "s3://" + bucket + '/' + prefix);
 	}
 
 	/**
@@ -104,7 +106,7 @@ public record S3FindRequest(
 	 */
 	public String describeScope() {
 		return "s3://" + bucket + '/' + prefix
-				+ (recursive ? " and below" : " (this level only)")
-				+ (caseSensitive ? ", case sensitive" : "");
+				+ (recursive ? tr("find.scope.recursive") : tr("find.scope.this.level"))
+				+ (caseSensitive ? tr("find.scope.case.sensitive") : "");
 	}
 }

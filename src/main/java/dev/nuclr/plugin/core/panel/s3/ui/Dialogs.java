@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.ui;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Desktop;
@@ -123,7 +125,7 @@ public final class Dialogs {
 		if (error == null || error instanceof S3Error.Cancelled) {
 			return;
 		}
-		error(title, error.describe());
+		error(title, error.display());
 	}
 
 	/**
@@ -238,12 +240,12 @@ public final class Dialogs {
 
 		try {
 			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
-			info("Open in a browser", "This machine has no browser we can launch."
-					+ System.lineSeparator() + "The address has been copied to the clipboard:"
+			info(tr("browser.title"), tr("browser.none.line1")
+					+ System.lineSeparator() + tr("browser.none.line2")
 					+ System.lineSeparator() + System.lineSeparator() + url);
 		} catch (Exception e) {
 			log.warn("Could not copy {} to the clipboard: {}", url, e.getMessage(), e);
-			info("Open in a browser", url);
+			info(tr("browser.title"), url);
 		}
 	}
 

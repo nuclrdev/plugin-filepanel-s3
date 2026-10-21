@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.service;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -82,7 +84,17 @@ public final class S3CopyService {
 	}
 
 	private String title() {
-		return moving ? "Move" : "Copy";
+		return moving ? tr("transfer.title.move") : tr("transfer.title.copy");
+	}
+
+	/** The English verb, for the log. */
+	private String verb() {
+		return moving ? "move" : "copy";
+	}
+
+	/** {@code base} with the ".move" or ".copy" suffix, for texts that name the operation. */
+	private String key(String base) {
+		return base + (moving ? ".move" : ".copy");
 	}
 
 	// -------------------------------------------------------------------------
@@ -104,7 +116,7 @@ public final class S3CopyService {
 
 		List<NuclrResource> sources = Selections.s3Targets(selectedResources, focusedResource);
 		if (sources.isEmpty()) {
-			Dialogs.error(title(), "Select one or more objects or folders to " + title().toLowerCase(java.util.Locale.ROOT) + ".");
+			Dialogs.error(title(), tr(key("transfer.select")));
 			return false;
 		}
 
@@ -115,7 +127,7 @@ public final class S3CopyService {
 
 		Path localDestination = Selections.localDirectory(other);
 		if (localDestination == null) {
-			Dialogs.error(title(), title() + " is only supported to a local folder or another S3 panel.");
+			Dialogs.error(title(), tr(key("transfer.unsupported.destination")));
 			return false;
 		}
 
@@ -125,7 +137,7 @@ public final class S3CopyService {
 			return false;
 		}
 		if (!Files.isDirectory(options.destination())) {
-			Dialogs.error(title(), "The destination is not a folder:\n" + options.destination());
+			Dialogs.error(title(), tr("transfer.destination.not.folder", options.destination()));
 			return false;
 		}
 
@@ -157,7 +169,7 @@ public final class S3CopyService {
 		var groups = new ArrayList<NuclrResource>();
 		var groupClients = new ArrayList<S3Client>();
 
-		callback.onStart("Preparing " + title().toLowerCase(java.util.Locale.ROOT) + "…");
+		callback.onStart(tr(key("transfer.preparing")));
 
 		for (NuclrResource source : sources) {
 
@@ -167,7 +179,7 @@ public final class S3CopyService {
 
 			S3Client client = S3Clients.byProfileId(S3Resource.profileId(source));
 			if (client == null) {
-				failures.add(source.getName() + " (its connection profile is gone)");
+				failures.add(tr("transfer.failure.profile.gone", source.getName()));
 				continue;
 			}
 
@@ -189,7 +201,7 @@ public final class S3CopyService {
 		}
 
 		ParallelTransfers.Summary summary =
-				ParallelTransfers.run(tasks, concurrency, callback, title() + "ing");
+				ParallelTransfers.run(tasks, concurrency, callback, tr(key("transfer.progress.label")));
 
 		int transferred = 0;
 		for (int group = 0; group < groups.size(); group++) {
@@ -205,12 +217,12 @@ public final class S3CopyService {
 		}
 
 		if (summary.cancelled()) {
-			log.info("S3 {} cancelled after {} item(s)", title().toLowerCase(java.util.Locale.ROOT), transferred);
+			log.info("S3 {} cancelled after {} item(s)", verb(), transferred);
 			return transferred;
 		}
 
 		log.info("S3 {} out finished: {} item(s) transferred, {} failed",
-				title().toLowerCase(java.util.Locale.ROOT), transferred, failures.size());
+				verb(), transferred, failures.size());
 		return transferred;
 	}
 
@@ -229,7 +241,7 @@ public final class S3CopyService {
 			return Outcome.CANCELLED;
 		}
 		if (!contents.isOk()) {
-			failures.add(folder.getName() + " (" + contents.errorOrNull().describe() + ')');
+			failures.add(folder.getName() + " (" + contents.errorOrNull().display() + ')');
 			return Outcome.FAILED;
 		}
 
@@ -288,7 +300,7 @@ public final class S3CopyService {
 			List<ParallelTransfers.Task> tasks, List<String> failures) {
 
 		if (key == null) {
-			failures.add(name + " (not a downloadable object)");
+			failures.add(tr("transfer.failure.not.downloadable", name));
 			return Outcome.FAILED;
 		}
 
@@ -384,7 +396,7 @@ public final class S3CopyService {
 				return Outcome.CANCELLED;
 			}
 			if (!result.isOk()) {
-				record(failures, name, result.errorOrNull().describe());
+				record(failures, name, result.errorOrNull().display());
 				return Outcome.FAILED;
 			}
 
@@ -429,7 +441,7 @@ public final class S3CopyService {
 			Map<String, NuclrResource> existingByName) {
 
 		if (!S3Resource.isInsideBucket(currentResource)) {
-			Dialogs.error(title(), "Open a bucket to " + title().toLowerCase(java.util.Locale.ROOT) + " files into it.");
+			Dialogs.error(title(), tr(key("transfer.open.bucket")));
 			return false;
 		}
 
@@ -438,13 +450,13 @@ public final class S3CopyService {
 		String prefix = S3Resource.objectPrefix(currentResource);
 		S3Client client = S3Clients.byProfileId(profileId);
 		if (client == null) {
-			Dialogs.error(title(), "The connection profile for this panel is no longer available.");
+			Dialogs.error(title(), tr("common.connection.gone"));
 			return false;
 		}
 
 		List<NuclrResource> sources = Selections.targets(selectedResources, focusedResource);
 		if (sources.isEmpty()) {
-			Dialogs.error(title(), "There is nothing here to " + title().toLowerCase(java.util.Locale.ROOT) + ".");
+			Dialogs.error(title(), tr(key("transfer.nothing")));
 			return false;
 		}
 
@@ -485,7 +497,7 @@ public final class S3CopyService {
 		var tasks = new ArrayList<ParallelTransfers.Task>();
 		var groups = new ArrayList<NuclrResource>();
 
-		callback.onStart("Preparing " + title().toLowerCase(java.util.Locale.ROOT) + "…");
+		callback.onStart(tr(key("transfer.preparing")));
 
 		for (NuclrResource source : sources) {
 
@@ -545,7 +557,7 @@ public final class S3CopyService {
 		}
 
 		ParallelTransfers.Summary summary =
-				ParallelTransfers.run(tasks, concurrency, callback, title() + "ing");
+				ParallelTransfers.run(tasks, concurrency, callback, tr(key("transfer.progress.label")));
 
 		int uploaded = 0;
 		for (int group = 0; group < groups.size(); group++) {
@@ -555,12 +567,12 @@ public final class S3CopyService {
 		}
 
 		if (summary.cancelled()) {
-			log.info("S3 {} cancelled after {} item(s)", title().toLowerCase(java.util.Locale.ROOT), uploaded);
+			log.info("S3 {} cancelled after {} item(s)", verb(), uploaded);
 			return uploaded;
 		}
 
 		log.info("S3 {} in finished: {} item(s) uploaded, {} failed",
-				title().toLowerCase(java.util.Locale.ROOT), uploaded, failures.size());
+				verb(), uploaded, failures.size());
 		return uploaded;
 	}
 
@@ -570,7 +582,7 @@ public final class S3CopyService {
 
 		Path directory = source.getPath();
 		if (directory == null || !Files.isDirectory(directory)) {
-			failures.add(source.getName() + " (not a readable folder)");
+			failures.add(tr("transfer.failure.not.readable.folder", source.getName()));
 			return Outcome.FAILED;
 		}
 
@@ -587,7 +599,7 @@ public final class S3CopyService {
 			// Nothing to upload, but the folder itself should still appear at the destination.
 			S3Result<Void> created = client.createFolder(bucket, rootPrefix);
 			if (!created.isOk()) {
-				failures.add(source.getName() + " (" + created.errorOrNull().describe() + ')');
+				failures.add(source.getName() + " (" + created.errorOrNull().display() + ')');
 				return Outcome.FAILED;
 			}
 			return Outcome.OK;
@@ -661,7 +673,7 @@ public final class S3CopyService {
 					return Outcome.CANCELLED;
 				}
 				if (!result.isOk()) {
-					record(failures, name, result.errorOrNull().describe());
+					record(failures, name, result.errorOrNull().display());
 					return Outcome.FAILED;
 				}
 				return Outcome.OK;
@@ -684,14 +696,13 @@ public final class S3CopyService {
 		String destinationProfileId = S3Resource.profileId(destination);
 
 		if (!java.util.Objects.equals(sourceProfileId, destinationProfileId)) {
-			Dialogs.error(title(), title() + " between two different S3 profiles is not supported yet.\n"
-					+ title() + " to a local folder first, then up to the other profile.");
+			Dialogs.error(title(), tr(key("transfer.cross.profile")));
 			return false;
 		}
 
 		S3Client client = S3Clients.byProfileId(sourceProfileId);
 		if (client == null) {
-			Dialogs.error(title(), "The connection profile for this panel is no longer available.");
+			Dialogs.error(title(), tr("common.connection.gone"));
 			return false;
 		}
 
@@ -732,7 +743,7 @@ public final class S3CopyService {
 		var tasks = new ArrayList<ParallelTransfers.Task>();
 		var groups = new ArrayList<NuclrResource>();
 
-		callback.onStart("Preparing " + title().toLowerCase(java.util.Locale.ROOT) + "…");
+		callback.onStart(tr(key("transfer.preparing")));
 
 		for (NuclrResource source : sources) {
 
@@ -758,7 +769,7 @@ public final class S3CopyService {
 		}
 
 		ParallelTransfers.Summary summary =
-				ParallelTransfers.run(tasks, concurrency, callback, title() + "ing");
+				ParallelTransfers.run(tasks, concurrency, callback, tr(key("transfer.progress.label")));
 
 		int copied = 0;
 		for (int group = 0; group < groups.size(); group++) {
@@ -773,7 +784,7 @@ public final class S3CopyService {
 		}
 
 		log.info("S3 server-side {} finished: {} item(s), {} failed",
-				title().toLowerCase(java.util.Locale.ROOT), copied, failures.size());
+				verb(), copied, failures.size());
 		return copied;
 	}
 
@@ -785,7 +796,7 @@ public final class S3CopyService {
 		S3Result<List<S3ObjectEntry>> contents =
 				S3Walk.collect(client, sourceBucket, sourcePrefix, callback::isCancelled);
 		if (!contents.isOk()) {
-			failures.add(sourcePrefix + " (" + contents.errorOrNull().describe() + ')');
+			failures.add(sourcePrefix + " (" + contents.errorOrNull().display() + ')');
 			return Outcome.FAILED;
 		}
 
@@ -828,12 +839,12 @@ public final class S3CopyService {
 			@Override
 			public Outcome transfer(S3Client.ProgressListener progress, BooleanSupplier cancelled) {
 				if (sourceKey == null) {
-					record(failures, name, "not a copyable object");
+					record(failures, name, tr("transfer.failure.not.copyable"));
 					return Outcome.FAILED;
 				}
 				S3Result<Void> result = client.copyObject(sourceBucket, sourceKey, destinationBucket, destinationKey);
 				if (!result.isOk()) {
-					record(failures, name, result.errorOrNull().describe());
+					record(failures, name, result.errorOrNull().display());
 					return Outcome.FAILED;
 				}
 				return Outcome.OK;
@@ -866,8 +877,8 @@ public final class S3CopyService {
 			String prefix = S3Resource.objectPrefix(source);
 			S3Result<List<S3ObjectEntry>> contents = S3Walk.collect(client, bucket, prefix, null);
 			if (!contents.isOk()) {
-				failures.add(source.getName() + " (copied, but could not be removed: "
-						+ contents.errorOrNull().describe() + ')');
+				failures.add(tr("transfer.failure.not.removed", source.getName(),
+						contents.errorOrNull().display()));
 				return false;
 			}
 			var keys = new ArrayList<String>();
@@ -879,8 +890,8 @@ public final class S3CopyService {
 
 		S3Result<Void> result = client.deleteObject(bucket, S3Resource.objectKey(source));
 		if (!result.isOk()) {
-			failures.add(source.getName() + " (copied, but could not be removed: "
-					+ result.errorOrNull().describe() + ')');
+			failures.add(tr("transfer.failure.not.removed", source.getName(),
+					result.errorOrNull().display()));
 			return false;
 		}
 		return true;
@@ -893,8 +904,8 @@ public final class S3CopyService {
 			List<String> batch = keys.subList(start, Math.min(start + S3Client.DELETE_BATCH_SIZE, keys.size()));
 			S3Result<Void> result = client.deleteObjects(bucket, batch);
 			if (!result.isOk()) {
-				failures.add(label + " (copied, but could not be removed: "
-						+ result.errorOrNull().describe() + ')');
+				failures.add(tr("transfer.failure.not.removed", label,
+						result.errorOrNull().display()));
 				return false;
 			}
 		}
@@ -949,12 +960,12 @@ public final class S3CopyService {
 			return;
 		}
 		int shown = Math.min(failures.size(), 12);
-		var message = new StringBuilder("Some items could not be " + title().toLowerCase(java.util.Locale.ROOT) + "d:\n\n");
+		var message = new StringBuilder(tr(key("transfer.failures.heading")));
 		for (int i = 0; i < shown; i++) {
 			message.append(failures.get(i)).append('\n');
 		}
 		if (failures.size() > shown) {
-			message.append("… and ").append(failures.size() - shown).append(" more");
+			message.append(tr("transfer.failures.more", String.valueOf(failures.size() - shown)));
 		}
 		Dialogs.error(title(), message.toString());
 	}

@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.service;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.util.Set;
 
 import dev.nuclr.plugin.core.panel.s3.api.S3Client;
@@ -37,8 +39,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class S3MakeFolderService {
 
-	private static final String TITLE = "Make Folder";
-
 	/** Create the service. */
 	public S3MakeFolderService() {
 	}
@@ -54,7 +54,7 @@ public final class S3MakeFolderService {
 	 */
 	public String makeFolder(S3Client client, String bucket, String prefix, Set<String> existingNames) {
 
-		String entered = Dialogs.prompt(TITLE, "Folder name:", null);
+		String entered = Dialogs.prompt(tr("folder.make.title"), tr("folder.name.prompt"), null);
 		if (entered == null) {
 			return null; // cancelled
 		}
@@ -64,12 +64,12 @@ public final class S3MakeFolderService {
 			return null;
 		}
 		if (isInvalidName(folderName)) {
-			Dialogs.error(TITLE, "A folder name cannot contain path separators.");
+			Dialogs.error(tr("folder.make.title"), tr("folder.name.separators"));
 			return null;
 		}
 		if (existingNames != null
 				&& (existingNames.contains(folderName) || existingNames.contains(folderName + "/"))) {
-			Dialogs.error(TITLE, "Something with that name already exists here.");
+			Dialogs.error(tr("folder.make.title"), tr("folder.name.exists"));
 			return null;
 		}
 
@@ -77,7 +77,7 @@ public final class S3MakeFolderService {
 		S3Result<Void> result = client.createFolder(bucket, folderKey);
 		if (!result.isOk()) {
 			log.warn("Could not create s3://{}/{}: {}", bucket, folderKey, result.errorOrNull().describe());
-			Dialogs.error(TITLE, "Could not create the folder:\n" + result.errorOrNull().describe());
+			Dialogs.error(tr("folder.make.title"), tr("folder.failed", result.errorOrNull().display()));
 			return null;
 		}
 

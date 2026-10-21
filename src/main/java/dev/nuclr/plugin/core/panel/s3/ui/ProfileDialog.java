@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.ui;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
@@ -109,21 +111,21 @@ public final class ProfileDialog extends JDialog {
 
 	private final JTextField nameField = new JTextField(26);
 
-	private final JRadioButton accessKeyAuth = new JRadioButton("Access key and secret", true);
-	private final JRadioButton awsProfileAuth = new JRadioButton("AWS profile (~/.aws)");
-	private final JRadioButton ssoAuth = new JRadioButton("IAM Identity Center (SSO)");
-	private final JRadioButton environmentAuth = new JRadioButton("Environment / instance role");
+	private final JRadioButton accessKeyAuth = new JRadioButton(tr("profile.auth.access.key"), true);
+	private final JRadioButton awsProfileAuth = new JRadioButton(tr("profile.auth.aws.profile"));
+	private final JRadioButton ssoAuth = new JRadioButton(tr("profile.auth.sso"));
+	private final JRadioButton environmentAuth = new JRadioButton(tr("profile.auth.environment"));
 
 	private final JTextField accessKeyIdField = new JTextField(26);
 	private final JPasswordField secretKeyField = new JPasswordField(26);
 	private final JPasswordField sessionTokenField = new JPasswordField(26);
 	private final JComboBox<String> awsProfileField = new JComboBox<>();
 	private final JCheckBox rememberSecretField =
-			new JCheckBox("Remember the secret on this machine (saved encrypted; do not tick on a shared login)");
+			new JCheckBox(tr("profile.remember.secret"));
 
 	private final JComboBox<String> regionField = new JComboBox<>(new DefaultComboBoxModel<>(COMMON_REGIONS));
 	private final JTextField endpointField = new JTextField(26);
-	private final JCheckBox pathStyleField = new JCheckBox("Address buckets in the path (needed by most S3-compatible services)");
+	private final JCheckBox pathStyleField = new JCheckBox(tr("profile.path.style"));
 	private final JTextField bucketField = new JTextField(26);
 	private final JTextField prefixField = new JTextField(26);
 
@@ -173,42 +175,42 @@ public final class ProfileDialog extends JDialog {
 		constraints.fill = GridBagConstraints.HORIZONTAL;
 		int row = 0;
 
-		row = addRow(constraints, row, "Name (optional):", nameField);
-		row = addSeparator(constraints, row, "Authentication");
+		row = addRow(constraints, row, tr("profile.label.name"), nameField);
+		row = addSeparator(constraints, row, tr("profile.section.authentication"));
 
 		var authPanel = new JPanel(new GridBagLayout());
 		var authConstraints = new GridBagConstraints();
 		authConstraints.anchor = GridBagConstraints.WEST;
 		addAuthRow(authPanel, authConstraints, 0, accessKeyAuth,
-				Dialogs.link("Console", IAM_SECURITY_CREDENTIALS_CONSOLE),
-				Dialogs.link("Docs", ACCESS_KEYS_DOCS));
+				Dialogs.link(tr("profile.link.console"), IAM_SECURITY_CREDENTIALS_CONSOLE),
+				Dialogs.link(tr("profile.link.docs"), ACCESS_KEYS_DOCS));
 		addAuthRow(authPanel, authConstraints, 1, awsProfileAuth,
-				Dialogs.link("Docs", AWS_CONFIG_FILES_DOCS));
+				Dialogs.link(tr("profile.link.docs"), AWS_CONFIG_FILES_DOCS));
 		addAuthRow(authPanel, authConstraints, 2, ssoAuth,
-				Dialogs.link("Console", IDENTITY_CENTER_CONSOLE),
-				Dialogs.link("Docs", SSO_DOCS));
+				Dialogs.link(tr("profile.link.console"), IDENTITY_CENTER_CONSOLE),
+				Dialogs.link(tr("profile.link.docs"), SSO_DOCS));
 		addAuthRow(authPanel, authConstraints, 3, environmentAuth,
-				Dialogs.link("Console", IAM_ROLES_CONSOLE),
-				Dialogs.link("Docs", ENVIRONMENT_DOCS));
+				Dialogs.link(tr("profile.link.console"), IAM_ROLES_CONSOLE),
+				Dialogs.link(tr("profile.link.docs"), ENVIRONMENT_DOCS));
 		row = addWide(constraints, row, authPanel);
 
 		authNote.setFont(authNote.getFont().deriveFont(authNote.getFont().getSize2D() - 1f));
 		row = addWide(constraints, row, authNote);
 
-		row = addRow(constraints, row, "Access key id:", accessKeyIdField);
-		row = addRow(constraints, row, "Secret access key:", secretKeyField);
-		row = addRow(constraints, row, "Session token (optional):", sessionTokenField);
+		row = addRow(constraints, row, tr("profile.label.access.key.id"), accessKeyIdField);
+		row = addRow(constraints, row, tr("profile.label.secret.key"), secretKeyField);
+		row = addRow(constraints, row, tr("profile.label.session.token.optional"), sessionTokenField);
 		row = addWide(constraints, row, rememberSecretField);
-		row = addRow(constraints, row, "AWS profile:", awsProfileField);
+		row = addRow(constraints, row, tr("profile.label.aws.profile"), awsProfileField);
 
-		row = addSeparator(constraints, row, "Endpoint");
-		row = addRow(constraints, row, "Region:", regionField);
-		row = addRow(constraints, row, "Endpoint URL (optional):", endpointField);
+		row = addSeparator(constraints, row, tr("profile.section.endpoint"));
+		row = addRow(constraints, row, tr("profile.label.region"), regionField);
+		row = addRow(constraints, row, tr("profile.label.endpoint.url"), endpointField);
 		row = addWide(constraints, row, pathStyleField);
 
-		row = addSeparator(constraints, row, "Starting location (optional)");
-		row = addRow(constraints, row, "Bucket:", bucketField);
-		row = addRow(constraints, row, "Prefix:", prefixField);
+		row = addSeparator(constraints, row, tr("profile.section.starting.location"));
+		row = addRow(constraints, row, tr("profile.label.bucket"), bucketField);
+		row = addRow(constraints, row, tr("profile.label.prefix"), prefixField);
 
 		rememberSecretField.addActionListener(event -> updateAuthEnablement());
 		accessKeyAuth.addActionListener(event -> updateAuthEnablement());
@@ -217,8 +219,8 @@ public final class ProfileDialog extends JDialog {
 		environmentAuth.addActionListener(event -> updateAuthEnablement());
 		updateAuthEnablement();
 
-		var okButton = new JButton("OK");
-		var cancelButton = new JButton("Cancel");
+		var okButton = new JButton(tr("common.ok"));
+		var cancelButton = new JButton(tr("common.cancel"));
 		okButton.addActionListener(event -> submit(profile));
 		cancelButton.addActionListener(event -> dispose());
 		getRootPane().setDefaultButton(okButton);
@@ -304,16 +306,16 @@ public final class ProfileDialog extends JDialog {
 
 		if (useAccessKey) {
 			authNote.setText(rememberSecretField.isSelected()
-					? "The secret is saved encrypted under your home directory, readable by programs running as you."
-					: "The secret is kept in memory for this session only and is never saved to disk.");
+					? tr("profile.note.secret.saved")
+					: tr("profile.note.secret.memory"));
 		} else if (awsProfileAuth.isSelected()) {
-			authNote.setText("Credentials are read from ~/.aws; profiles that assume a role use the AWS CLI.");
+			authNote.setText(tr("profile.note.aws.profile"));
 		} else if (ssoAuth.isSelected()) {
 			authNote.setText(AwsCli.isAvailable()
-					? "Signs in through your identity provider; the AWS CLI refreshes the session."
-					: "Requires the AWS CLI, which was not found on the PATH.");
+					? tr("profile.note.sso")
+					: tr("profile.note.sso.no.cli"));
 		} else {
-			authNote.setText("Uses AWS_ACCESS_KEY_ID, a container task role, or the EC2 instance role.");
+			authNote.setText(tr("profile.note.environment"));
 		}
 	}
 
@@ -338,7 +340,7 @@ public final class ProfileDialog extends JDialog {
 		if (mode == S3Profile.AuthMode.ACCESS_KEY) {
 			String accessKeyId = accessKeyIdField.getText().trim();
 			if (accessKeyId.isBlank()) {
-				showValidationError("An access key id is required for access-key authentication.");
+				showValidationError(tr("profile.invalid.access.key.id"));
 				return;
 			}
 			profile.setAccessKeyId(accessKeyId);
@@ -353,13 +355,12 @@ public final class ProfileDialog extends JDialog {
 		} else if (mode == S3Profile.AuthMode.AWS_PROFILE || mode == S3Profile.AuthMode.SSO) {
 			String awsProfileName = text(awsProfileField.getSelectedItem());
 			if (awsProfileName.isBlank()) {
-				showValidationError("Choose an AWS profile, or type its name.");
+				showValidationError(tr("profile.invalid.aws.profile"));
 				return;
 			}
 			profile.setAwsProfileName(awsProfileName);
 			if (mode == S3Profile.AuthMode.SSO && !AwsCli.isAvailable()) {
-				showValidationError("SSO needs the AWS CLI, which was not found on the PATH.\n"
-						+ "Install it, or choose another authentication mode.");
+				showValidationError(tr("profile.invalid.sso.no.cli"));
 				return;
 			}
 		}
@@ -367,16 +368,15 @@ public final class ProfileDialog extends JDialog {
 		if (!profile.getEndpoint().isBlank()) {
 			String endpoint = profile.getEndpoint();
 			if (endpoint.contains(" ")) {
-				showValidationError("The endpoint URL cannot contain spaces.");
+				showValidationError(tr("profile.invalid.endpoint.spaces"));
 				return;
 			}
 			// Almost every S3-compatible service needs path-style addressing; a custom endpoint with
 			// host-style buckets is far more often a mistake than a deliberate choice.
 			if (!pathStyleField.isSelected()) {
 				int answer = JOptionPane.showConfirmDialog(this,
-						"Most S3-compatible services require path-style bucket addressing.\n"
-								+ "Turn it on for this profile?",
-						"Endpoint", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+						tr("profile.path.style.question"),
+						tr("profile.section.endpoint"), JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
 				if (answer == JOptionPane.CANCEL_OPTION || answer == JOptionPane.CLOSED_OPTION) {
 					return;
 				}
@@ -467,7 +467,7 @@ public final class ProfileDialog extends JDialog {
 	}
 
 	private void showValidationError(String message) {
-		JOptionPane.showMessageDialog(this, message, "Invalid profile", JOptionPane.ERROR_MESSAGE);
+		JOptionPane.showMessageDialog(this, message, tr("profile.invalid.title"), JOptionPane.ERROR_MESSAGE);
 	}
 
 	private static String text(Object value) {

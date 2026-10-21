@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -323,7 +325,7 @@ public final class S3Resource extends NuclrResource {
 		resource.getMetadata().put(BUCKET, bucket);
 		resource.getMetadata().put(PREFIX, prefix);
 		resource.getMetadata().put(CONTINUATION, continuation);
-		resource.rename("▼ Load more…");
+		resource.rename(tr("listing.load.more"));
 		resource.getMetadata().put("Size", "-");
 		resource.getMetadata().put("Modified", "-");
 		resource.getMetadata().put("Storage class", "-");
@@ -342,7 +344,7 @@ public final class S3Resource extends NuclrResource {
 	 */
 	public static S3Resource searchResults(List<NuclrResource> hits, String title, NuclrResource origin) {
 		S3Resource resource = new S3Resource();
-		String label = title == null || title.isBlank() ? "Search results" : title;
+		String label = title == null || title.isBlank() ? tr("search.results.default") : title;
 		resource.setUuid(ROOT_UUID + "search/" + UUID.randomUUID());
 		resource.setFullPath(resource.getUuid());
 		resource.setFolder(true);
@@ -394,7 +396,7 @@ public final class S3Resource extends NuclrResource {
 		String bucket = bucketName(this);
 		String key = objectKey(this);
 		if (profileId == null || bucket == null || key == null) {
-			throw new IOException("Not a downloadable S3 object: " + getName());
+			throw new IOException(tr("download.not.object", getName()));
 		}
 
 		String cacheKey = S3TempFiles.cacheKey(profileId, bucket, key);
@@ -405,7 +407,7 @@ public final class S3Resource extends NuclrResource {
 
 		S3Client client = S3Clients.byProfileId(profileId);
 		if (client == null) {
-			throw new IOException("The connection profile for " + getName() + " is no longer available.");
+			throw new IOException(tr("download.connection.gone", getName()));
 		}
 
 		long startNanos = System.nanoTime();
@@ -413,8 +415,8 @@ public final class S3Resource extends NuclrResource {
 		S3Result<Long> result = client.downloadToFile(bucket, key, temp, null, null);
 		if (!result.isOk()) {
 			Files.deleteIfExists(temp);
-			throw new IOException("Could not download s3://" + bucket + '/' + key + ": "
-					+ result.errorOrNull().describe());
+			throw new IOException(tr("download.failed", "s3://" + bucket + '/' + key,
+					result.errorOrNull().display()));
 		}
 
 		S3TempFiles.register(cacheKey, temp);
@@ -590,7 +592,7 @@ public final class S3Resource extends NuclrResource {
 	 */
 	public static String searchTitle(NuclrResource resource) {
 		String title = metaString(resource, SEARCH_TITLE);
-		return title == null ? "Search results" : title;
+		return title == null ? tr("search.results.default") : title;
 	}
 
 	/**

@@ -17,6 +17,8 @@
 */
 package dev.nuclr.plugin.core.panel.s3.find;
 
+import static dev.nuclr.plugin.core.panel.s3.Messages.tr;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
@@ -128,7 +130,7 @@ public final class S3FindService {
 		S3Client client = S3Clients.byProfileId(request.profileId());
 		if (client == null) {
 			complete(listener, 0, 0, false,
-					new S3Error.CredentialsUnavailable("The connection profile is no longer available."));
+					new S3Error.CredentialsUnavailable(tr("find.connection.gone")));
 			return;
 		}
 

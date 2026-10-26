@@ -16,7 +16,8 @@
 			"pageUrl": "https://github.com/nuclrdev/plugin-filepanel-s3",
 			"docUrl": "https://github.com/nuclrdev/plugin-filepanel-s3",
 			"developer": "Official",
-			"singleton": false
+			"singleton": false,
+			"connections": true
 		}
 	]
 }

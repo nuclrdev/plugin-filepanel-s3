@@ -60,8 +60,8 @@ import dev.nuclr.plugin.core.panel.s3.auth.S3Profile;
  *
  * <p>The secret access key can be typed here for convenience, but it is handed back to the caller
  * rather than becoming part of the saved profile — see {@link S3Profile}. By default it is cached in
- * memory for the session; ticking "remember" instead saves it to {@link SecretStore}, a separate
- * encrypted file, so the profile file stays safe to sync either way.
+ * memory for the session; ticking "remember" instead saves it to {@link SecretStore}, the OS
+ * credential store, so the profile file stays safe to sync either way.
  */
 public final class ProfileDialog extends JDialog {
 

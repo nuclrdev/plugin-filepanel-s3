@@ -159,7 +159,7 @@ public final class SecretPrompt {
 	 * Say plainly what each choice does with the key.
 	 *
 	 * <p>Saving it is a real trade and the user is told so at the moment they make it, rather than
-	 * discovering later that a credential is sitting in their home directory.
+	 * discovering later that a credential is sitting in their OS credential store.
 	 */
 	private static String rememberNote(boolean remember) {
 		return remember

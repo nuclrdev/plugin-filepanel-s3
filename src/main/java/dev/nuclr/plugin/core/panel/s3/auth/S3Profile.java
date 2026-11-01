@@ -37,7 +37,7 @@ import lombok.Data;
  *
  * <p>A profile may opt into {@link #isRememberSecret() remembering} its secret so it is asked for
  * once rather than once per session. Even then the secret is not written here: it goes to
- * {@link SecretStore}, a separate, encrypted, owner-only file. This class carries the preference,
+ * {@link SecretStore}, which keeps it in the OS credential store. This class carries the preference,
  * never the key.
  *
  * <p>The four authentication modes cover how people actually reach S3: keys typed in, the AWS
@@ -99,7 +99,7 @@ public class S3Profile implements Serializable {
 	 * than once per session.
 	 *
 	 * <p>Only the flag lives in this file — it is a preference, not a secret. The key itself goes
-	 * to {@link SecretStore}, which is deliberately a different file with different handling.
+	 * to {@link SecretStore}, which keeps it in the OS credential store, not in any file.
 	 */
 	private boolean rememberSecret;
 

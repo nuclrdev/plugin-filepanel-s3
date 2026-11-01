@@ -124,6 +124,6 @@ class RememberedSecretTest {
 	}
 
 	private static SecretStore storeIn(Path dir) {
-		return new SecretStore(dir.resolve("secrets.enc"), dir.resolve("secrets.key"));
+		return new SecretStore(new InMemoryCredentialStore(), dir.resolve("secrets.enc"), dir.resolve("secrets.key"));
 	}
 }

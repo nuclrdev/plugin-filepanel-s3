@@ -50,6 +50,7 @@ import dev.nuclr.plugin.core.panel.s3.auth.AwsCli;
 import dev.nuclr.plugin.core.panel.s3.auth.AwsConfigFiles;
 import dev.nuclr.plugin.core.panel.s3.auth.S3Profile;
 import dev.nuclr.plugin.core.panel.s3.auth.SecretCache;
+import dev.nuclr.plugin.core.panel.s3.auth.SecretStore;
 import dev.nuclr.plugin.core.panel.s3.find.S3FindDialog;
 import dev.nuclr.plugin.core.panel.s3.find.S3FindRequest;
 import dev.nuclr.plugin.core.panel.s3.find.S3FindResultsWindow;
@@ -140,6 +141,8 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 	public void preinit(NuclrPluginContext context) {
 		if (context != null) {
 			Messages.use(context.getLocale());
+			// Remembered secrets live in the OS credential store; every instance gets the same view.
+			SecretStore.useCredentialStore(context.getCredentialStore());
 		}
 		this.context = context;
 		this.currentResource = S3Resource.root();
@@ -658,7 +661,7 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 			return false;
 		}
 		// A secret typed in the dialog never goes into the profile file. It is cached for this
-		// session, and saved to the separate encrypted store only when the user asked for that.
+		// session, and saved to the OS credential store only when the user asked for that.
 		String profileId = result.profile().getId();
 		if (result.secretAccessKey() != null) {
 			SecretCache.put(profileId, result.secretAccessKey(), result.sessionToken());

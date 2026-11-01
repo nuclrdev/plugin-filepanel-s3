@@ -52,16 +52,21 @@ you would rather not have AWS configuration on the machine at all.
 
 If you would rather not retype the key every session, tick **Remember the
 secret on this machine** in the profile dialog, or **Save this key on this
-machine and stop asking** in the connect prompt. The key then goes to
-`~/.nuclr/s3/secrets.enc`, encrypted with AES-GCM under a key in
-`~/.nuclr/s3/secrets.key`, both owner-only where the filesystem supports it.
-Your `profiles.json` still holds no secrets and stays safe to sync.
+machine and stop asking** in the connect prompt. The key then goes to your
+operating system's credential store: Windows Credential Manager, macOS
+Keychain, or the Secret Service (GNOME Keyring or KWallet) on Linux. It is
+never written to a settings file, and your `profiles.json` still holds no
+secrets and stays safe to sync. A session token is stored beside it, split
+into parts when it is longer than one Windows entry can hold.
 
-This is a convenience, not a vault. The encryption key sits beside the
-ciphertext, so anything running as you can read it — the same trade
-`~/.aws/credentials` makes. It keeps the key out of backups, synced home
-directories and shoulder-surfed terminals; it does not protect you from
-software running under your own account. Leave it unticked on a shared login.
+Secrets saved by versions before 1.0.9 in `~/.nuclr/s3/secrets.enc` are moved
+into the credential store the first time the panel needs one, and the old file
+and its key are deleted. On a machine with no usable credential store the key
+is kept in memory for the session only.
+
+The credential store protects the key from other users and keeps it out of
+backups and synced folders. Software running under your own account can still
+ask for it, so leave **Remember** unticked on a shared login.
 
 A saved key is dropped automatically the moment the endpoint rejects it, so
 rotating a key prompts for the new one rather than failing repeatedly on the
@@ -161,8 +166,7 @@ mid-way, not just between files.
 |---|---|
 | Connection profiles | `~/.nuclr/s3/profiles.json` — no secrets, safe to sync |
 | Secret access keys | Memory only for the session, unless you tick "remember" |
-| Remembered secrets | `~/.nuclr/s3/secrets.enc`, AES-GCM encrypted — never sync this |
-| Secret store key | `~/.nuclr/s3/secrets.key` — never sync this either |
+| Remembered secrets | The OS credential store (Credential Manager, Keychain, Secret Service) |
 | SSO tokens | The AWS CLI's own cache; this plugin never writes them |
 | Viewed objects | A temp file per object, deleted when the plugin unloads |
 

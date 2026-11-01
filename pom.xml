@@ -15,7 +15,7 @@
 		     actions, so the manifest keeps asking for 4.0.0: older Commanders still load
 		     the panel. Keep newer SDK API inside actions/. -->
 		<platform.sdk.version>6.1.0</platform.sdk.version>
-		<platform.sdk.min.version>4.0.0</platform.sdk.min.version>
+		<platform.sdk.min.version>5.0.0</platform.sdk.min.version>
 		<maven.compiler.source>25</maven.compiler.source>
 		<maven.compiler.target>25</maven.compiler.target>
 		<jarsigner.keystorepath>C:/nuclr/key/nuclr-signing.p12</jarsigner.keystorepath>

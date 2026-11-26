@@ -159,6 +159,34 @@ public final class SecretStore {
 	}
 
 	/**
+	 * The remembered secret access key alone, found the same way as {@link #get}: the credential
+	 * store first, then a legacy file not yet moved. The session token is not read; an export
+	 * must never carry one, since it expires within hours.
+	 *
+	 * @param profileId the profile id
+	 * @return the secret access key, or {@code null} when nothing is remembered for it
+	 */
+	public synchronized String secretAccessKey(String profileId) {
+		if (!isUsableKey(profileId)) {
+			return null;
+		}
+		migrate();
+		NuclrCredentialStore credentials = credentials();
+		if (credentials != null) {
+			try {
+				Optional<String> secret = credentials.get(profileId);
+				if (secret.isPresent()) {
+					return secret.get();
+				}
+			} catch (NuclrCredentialException e) {
+				log.debug("No saved S3 secret for {}: {}", profileId, e.getMessage());
+			}
+		}
+		Entry legacy = readLegacy().get(profileId);
+		return legacy == null ? null : legacy.secretAccessKey();
+	}
+
+	/**
 	 * Remember a profile's credentials on this machine, replacing anything held for it.
 	 *
 	 * @param profileId       the profile id

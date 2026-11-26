@@ -51,6 +51,7 @@ import dev.nuclr.plugin.core.panel.s3.auth.AwsConfigFiles;
 import dev.nuclr.plugin.core.panel.s3.auth.S3Profile;
 import dev.nuclr.plugin.core.panel.s3.auth.SecretCache;
 import dev.nuclr.plugin.core.panel.s3.auth.SecretStore;
+import dev.nuclr.plugin.core.panel.s3.transfer.S3Transfer;
 import dev.nuclr.plugin.core.panel.s3.find.S3FindDialog;
 import dev.nuclr.plugin.core.panel.s3.find.S3FindRequest;
 import dev.nuclr.plugin.core.panel.s3.find.S3FindResultsWindow;
@@ -114,6 +115,9 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 	private final String uuid = UUID.randomUUID().toString();
 
 	private final AwsConfigFiles awsFiles = AwsConfigFiles.user();
+
+	/** Commander's Configs - Export / Import of saved profiles; see S3Transfer. */
+	private final S3Transfer transfer = new S3Transfer(S3Clients::store, S3Clients::secrets);
 
 	private NuclrPluginContext context;
 
@@ -565,6 +569,12 @@ public class S3FilePanelPlugin implements FilePanelNuclrPlugin {
 	@Override
 	public void act(BaseNuclrPlugin other, String actionType, List<NuclrResource> selectedResources,
 			NuclrResource focusedResource, Map<String, Object> data, NuclrPluginCallback callback) {
+
+		// Settings transfer: Commander asks the action instance, off the EDT, with plain maps.
+		if (S3Transfer.handles(actionType)) {
+			transfer.handle(actionType, data);
+			return;
+		}
 
 		// Actions declared in actions.json (agents, command palette). They need no pane,
 		// selection or open resource, so they run the same on a headless instance; see
